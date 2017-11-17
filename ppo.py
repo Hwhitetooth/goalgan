@@ -21,6 +21,9 @@ def rollout(env, pi, horizon, episodes, render = False):
     cur_ep_length = cur_ep_reward = t = 0
     while True:
         a, v = pi.get_a_and_v(s[None])
+        # FIXME: a bug here
+        if np.any(np.isnan(a)):
+            a = env.action_space.sample()
         s_next, r, done, _ = env.step(np.array(a))
         if render:
             env.render()
@@ -140,8 +143,12 @@ def train(env_name,
     # Training.
     sess.run(tf.global_variables_initializer())
 
-    def update_policy(envs, episodes = 10):
-        for env in envs:
+    def update_policy(env, targets_buffer, episodes = 10):
+        targets = np.random.choice(len(targets_buffer), 10)
+        ep = 0
+        for i in targets:
+            tx, ty = targets_buffer[i]
+            env.reset(tx, ty)
             data_gen = rollout(env, pi, horizon, episodes, render)
             for raw_data in data_gen:
                 raw_data.pop("ep_length")
@@ -153,6 +160,8 @@ def train(env_name,
                         train_feed= {pi.inputs: batch["s"], pi_old.inputs: batch["s"], a_taken: batch["a"], \
                                 adv_sample: batch["adv"], v_sample: batch["g"], step: it * horizon}
                         sess.run(train_op, train_feed)
+            ep += 1
+            print(ep)
         '''
         stats_length = deque(maxlen = 100)
         stats_reward = deque(maxlen = 100)
@@ -160,11 +169,12 @@ def train(env_name,
         stats_reward.extend(raw_data.pop("ep_reward"))
         '''
 
-    def eval_policy(envs, episodes = 10):
-        stats_length = deque(maxlen = episodes * len(envs))
-        stats_reward = deque(maxlen = episodes * len(envs))
-        for env in envs:
-            data_gen = rollout(env, pi, horizon, episodes, render)
+    def eval_policy(env, targets):
+        stats_length = deque(maxlen = len(targets))
+        stats_reward = deque(maxlen = len(targets))
+        for tx, ty in targets:
+            env.reset(tx, ty)
+            data_gen = rollout(env, pi, horizon, 1, render)
             for raw_data in data_gen:
                 stats_length.extend(raw_data.pop("ep_length"))
                 stats_reward.extend(raw_data.pop("ep_reward"))
@@ -172,21 +182,29 @@ def train(env_name,
         mean_reward = np.mean(np.array(stats_reward), axis = 0)
         return mean_length, mean_reward
 
-    tx = 1.0
+    radius = 0.1
     env = Env(env_name)
+    targets = deque(maxlen = 100)
+    for i in range(5):
+        x = np.random.rand() * radius
+        y = np.sqrt(radius * radius - x * x)
+        targets.append((x, y))
     for it in range(10000):
-        env.reset(tx, 0.0)
-        update_policy([env], 1)
-        mean_length, mean_reward = eval_policy([env], 1)
+        update_policy(env, targets, 10)
+        mean_length, mean_reward = eval_policy(env, targets)
         logger.log("********** Iteration %i ************" % (it))
-        logger.record_tabular("Distance", tx)
+        logger.record_tabular("Distance", radius)
         logger.record_tabular("Mean length", mean_length)
         logger.record_tabular("Mean reward", mean_reward)
         logger.dump_tabular()
-        if mean_reward < 0.5:
-            tx *= 0.8
-        else:
-            tx *= 1.2
+        if mean_reward < 0.6:
+            radius *= 0.8
+        elif mean_reward > 0.99:
+            radius *= 1.2
+            for i in range(5):
+                x = np.random.rand() * radius
+                y = np.sqrt(radius * radius - x * x)
+                targets.append((x, y))
 
     '''
     stats_losses= []

@@ -6,21 +6,26 @@ class Env(object):
         self.env.unwrapped.walk_target_x = target_x
         self.env.unwrapped.walk_target_y = target_y
         self.eps = eps
+        self.step_cnt = 0
 
     def reset(self, new_x = None, new_y = None):
         if new_x is not None:
             self.env.unwrapped.walk_target_x = new_x
         if new_y is not None:
             self.env.unwrapped.walk_target_y = new_y 
+        self.step_cnt = 0
         return self.env.reset()
 
     def step(self, a):
+        self.step_cnt += 1
         s, r, done, info = self.env.step(a)
         if self.env.unwrapped.walk_target_dist <= self.eps:
             r = 1.0
             done = True
         else:
             r = 0.0
+        if self.step_cnt == 100:
+            done = True
         return s, r, done, info
 
     @property
