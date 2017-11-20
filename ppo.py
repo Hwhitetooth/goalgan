@@ -1,47 +1,56 @@
 import numpy as np
 import tensorflow as tf
-import gym, roboschool
-from policy import MLPPolicy, CNNPolicy
-from utils import Dataset, MovingMeanVar
+import gym
+from utils import Dataset
 import logger
 from collections import deque
 import os
 import time
 from env_wrapper import Env
 
-def rollout(env, pi, goals, episodes_per_goal = 1, render = False):
+
+def rollout(env, pi, goals, episodes = None, timesteps = None, render = False):
+    if episodes is None and timesteps is None:
+        raise ValueError("Both episodes and timesteps are None.")
+    if episodes is not None and timesteps is not None:
+        raise ValueError("Both episodes and timesteps are not None.")
     s_batch, a_batch, r_batch, v_batch, done_batch = [], [], [], [], []
-    ep_length = []
-    ep_reward = []
+    cumulative_reward = 0
     for gx, gy in goals:
-        env.reset(gx, gy)
-        for ep in range(episodes_per_goal):
-            cur_ep_length = cur_ep_reward = 0
-            s = env.reset()
-            done = False
-            while not done:
-                a, v = pi.get_a_and_v(s[None])
-                # FIXME: a bug here
-                if np.any(np.isnan(a)):
-                    a = env.action_space.sample()
-                s_next, r, done, _ = env.step(np.array(a))
-                if render:
-                    env.render()
-                s_batch.append(s)
-                a_batch.append(a)
-                r_batch.append(r)
-                v_batch.append(v)
-                done_batch.append(done)
-                cur_ep_length += 1
-                cur_ep_reward += r
-                s = s_next
-            ep_length.append(cur_ep_length)
-            ep_reward.append(cur_ep_reward)
+        s = env.reset(gx, gy)
+        step = 0
+        ep = 0
+        while True:
+            a, v = pi.get_a_and_v(s[None])
+            # FIXME: a bug here
+            if np.any(np.isnan(a)):
+                print("WARNING: found NaN in actions", a)
+                a = env.action_space.sample()
+            s_next, r, done, _ = env.step(np.array(a))
+            if render:
+                env.render()
+            s_batch.append(s)
+            a_batch.append(a)
+            r_batch.append(r)
+            v_batch.append(v)
+            done_batch.append(done)
+            cumulative_reward += r
+            s = s_next
+            step += 1
+            if done:
+                ep += 1
+                s = env.reset()
+                if episodes is not None and ep == episodes:
+                    break
+            if timesteps is not None and step == timesteps:
+                break
+    normalized_reward = cumulative_reward / episodes if episodes is not None else cumulative_reward / timesteps
     return {"s": np.array(s_batch),
             "a": np.array(a_batch),
             "r": np.array(r_batch),
             "v": np.array(v_batch),
-            "done": np.array(done_batch)}, ep_reward
+            "done": np.array(done_batch)}, normalized_reward
+
 
 def process_data(raw, gamma, lamda):
     s_batch, a_batch, r_batch, v_batch, done_batch = raw["s"], raw["a"], raw["r"], raw["v"], raw["done"]
@@ -68,6 +77,7 @@ def process_data(raw, gamma, lamda):
     data["g"] = g_batch
     data["adv"] = adv_batch
     return data
+
 
 def train(env_name,
         sess,
@@ -117,7 +127,7 @@ def train(env_name,
 
     def update_policy(env, goals, iterations = 5):
         for it in range(iterations):
-            raw_data, _ = rollout(env, pi, goals, 1, render)
+            raw_data, _ = rollout(env, pi, goals, episodes = 1)
             data = Dataset(process_data(raw_data, gamma, lamda), batch_size)
             sess.run(update_old)
             for _ in range(epochs):
@@ -129,14 +139,13 @@ def train(env_name,
     def eval_policy(env, goals):
         results = []
         for gx, gy in goals:
-            _, ep_reward = rollout(env, pi, [(gx, gy)], 10)
-            score = sum(ep_reward) / len(ep_reward)
+            _, score = rollout(env, pi, [(gx, gy)], timesteps = 100, render = render)
             results.append((score, (gx, gy)))
         return results
 
-    score_min, score_max = 0.6, 0.9
+    score_min, score_max = 0.06, 0.09
     env = Env(env_name)
-    r_min, r_max = 0.1, 0.5
+    r_min, r_max = 0.1, 0.7
     replay_buffer = deque(maxlen = 50000)
     for _ in range(100):
         r = np.random.rand() * (r_max - r_min) + r_min
