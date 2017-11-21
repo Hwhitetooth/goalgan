@@ -159,6 +159,7 @@ def train(env_name,
         while len(goals) < num_goals:
             goals.append(replay_buffer[np.random.randint(len(replay_buffer))])
         results = update_policy(env, goals, 5) # This is slow!!!
+        labels = [(int(score >= r_min and score <= r_max), (gx, gy)) for score, (gx, gy) in scores]
         new_d_min, new_d_max = 1E10, 0
         scores = []
         for score, (gx, gy) in results:
