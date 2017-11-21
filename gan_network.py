@@ -16,7 +16,7 @@ class LSGAN(object):
         self.use_batchnorm = True
 
         #self.inp_noise = tf.placeholder(tf.float32, [None, 1024])
-        self.inp_goal= tf.placeholder(tf.float32, [None, 32, 32, 3])
+        self.inp_goal= tf.placeholder(tf.float32, [None, 2])
         self.inp_label = tf.placeholder(tf.float32, [None])
         self.inp_noise = tf.placeholder(tf.float32, [None, 1024])
 
@@ -63,26 +63,29 @@ class LSGAN(object):
         return gen
 
 
-
-
-
     def make_generator_network(self, noise, reuse):
         with tf.variable_scope('G', reuse=reuse):
-            x = self.bn_func_gen(tf.layers.dense(noise, 256*8*8, activation=None), training=self.is_training)
-            x = self.bn_func_gen(tf.layers.conv2d_transpose(tf.reshape(x, [-1, 8, 8, 256]), 256, 5, 2, padding='SAME', activation=None), training=self.is_training)
-            x = self.bn_func_gen(tf.layers.conv2d_transpose(x, 256, 5, 1, padding='SAME', activation=None), training=self.is_training) # 16 x 16
-            x = self.bn_func_gen(tf.layers.conv2d_transpose(x, 256, 5, 2, padding='SAME', activation=None), training=self.is_training)
-            x = tf.nn.sigmoid(tf.layers.conv2d_transpose(x, 3, 5, 1, padding='SAME', activation=None))  # 32 x 32
+            x = self.bn_func_gen(tf.layers.dense(noise, 100, activation=None), training=self.is_training)
+            x = self.bn_func_gen(tf.layers.dense(x, 100, activation=None), training=self.is_training)
+            x = self.bn_func_gen(tf.layers.dense(x, 100, activation=None), training=self.is_training)
+            x = tf.layers.dense(x, 2)
+            #x = self.bn_func_gen(tf.layers.conv2d_transpose(tf.reshape(x, [-1, 8, 8, 256]), 256, 5, 2, padding='SAME', activation=None), training=self.is_training)
+            #x = self.bn_func_gen(tf.layers.conv2d_transpose(x, 256, 5, 1, padding='SAME', activation=None), training=self.is_training) # 16 x 16
+            #x = self.bn_func_gen(tf.layers.conv2d_transpose(x, 256, 5, 2, padding='SAME', activation=None), training=self.is_training)
+            #x = tf.nn.sigmoid(tf.layers.conv2d_transpose(x, 3, 5, 1, padding='SAME', activation=None))  # 32 x 32
 
             #x = self.bn_func(tf.layers.conv2d_transpose(x, 256, 3, 1, activation=tf.nn.relu), training=self.is_training)
             #x = tf.layers.conv2d_transpose(x, 3, 5, 2, padding='SAME', activation=tf.nn.sigmoid)
             #print(x)
         return x
 
-    def make_discriminator_network(self, image, reuse):
+    def make_discriminator_network(self, goal, reuse):
         with tf.variable_scope('D', reuse=reuse):
-            x = tf.layers.conv2d(image, 64, 5, 2, padding='SAME', activation=leaky_relu) # 16
-            x = self.bn_func_disc(tf.layers.conv2d(x, 64, 5, 2, padding='SAME', activation=None), training=self.is_training) # 8
-            x = self.bn_func_disc(tf.layers.conv2d(x, 64, 3, 2, padding='SAME', activation=None), training=self.is_training)
-            x = tf.layers.dense(tf.reshape(x, [-1, 4*4*64]), 1, activation=tf.nn.tanh)
+            x = self.bn_func_disc(tf.layers.dense(goal, 100), training=self.is_training)
+            x = self.bn_func_disc(tf.layers.dense(x, 100), training=self.is_training)
+            x = tf.nn.tanh(tf.layers.dense(x, 1))
+            #x = tf.layers.conv2d(image, 64, 5, 2, padding='SAME', activation=leaky_relu) # 16
+            #x = self.bn_func_disc(tf.layers.conv2d(x, 64, 5, 2, padding='SAME', activation=None), training=self.is_training) # 8
+            #x = self.bn_func_disc(tf.layers.conv2d(x, 64, 3, 2, padding='SAME', activation=None), training=self.is_training)
+            #x = tf.layers.dense(tf.reshape(x, [-1, 4*4*64]), 1, activation=tf.nn.tanh)
         return x
