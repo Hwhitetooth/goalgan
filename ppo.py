@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-import gym
+import gym, roboschool
 from utils import Dataset
 import logger
 from collections import deque
@@ -56,7 +56,6 @@ def rollout(env, pi, goals, episodes = None, timesteps = None, render = False):
 def process_data(raw, gamma, lamda):
     s_batch, a_batch, r_batch, v_batch, done_batch = raw["s"], raw["a"], raw["r"], raw["v"], raw["done"]
     horizon = s_batch.shape[0]
-    g_batch = np.zeros(horizon, "float32")
     adv_batch = np.zeros(horizon, "float32")
     v_next = adv_next = 0
     for i in reversed(range(horizon)):
@@ -88,9 +87,12 @@ def train(env_name,
         batch_size = 64,
         epochs = 10,
         lr = 3E-4,
-        max_steps = 1000000,
         clip_eps = 0.2,
+        max_iters = 300,
         eps = 0.5,
+        num_goals = 100,
+        r_min = 0.01,
+        r_max = 0.02,
         render = False):
     env = gym.make(env_name)
     pi = policy_fn(sess, env.observation_space.shape, env.action_space, "pi")
@@ -108,12 +110,9 @@ def train(env_name,
     v_loss = tf.reduce_mean(tf.square(v_sample - pi.v))
 
     total_loss = pi_loss + v_loss
-    losses = [total_loss, pi_loss, v_loss]
-    losses_names = ["all", "pi", "v", "entropy"]
 
     # Optimization.
     step = tf.placeholder(tf.int32)
-    lr = tf.train.polynomial_decay(lr, step, max_steps, 0.0)
     opt = tf.train.AdamOptimizer(lr, epsilon = 1E-5)
     train_op = opt.minimize(total_loss, var_list = pi.vars)
 
@@ -141,41 +140,39 @@ def train(env_name,
         return results
     '''
 
-    score_min, score_max = 0.01, 0.02
     env = Env(env_name, eps = eps)
-    r_min, r_max = 0.5, 0.7
+    d_min, d_max = 0.5, 0.7
     replay_buffer = deque(maxlen = 100)
     for _ in range(1):
-        r = np.random.rand() * (r_max - r_min) + r_min
-        gx = np.random.rand() * r
-        gy = np.sqrt(r * r - gx * gx)
+        d = np.random.rand() * (d_max - d_min) + d_min
+        gx = np.random.rand() * d
+        gy = np.sqrt(d * d - gx * gx)
         replay_buffer.append((gx, gy))
-    for it in range(10000):
-        new_goals = []
-        for _ in range(16):
-            r = np.random.rand() * (r_max - r_min) + r_min
-            gx = np.random.rand() * r
-            gy = np.sqrt(r * r - gx * gx)
-            new_goals.append((gx, gy))
-        old_goals = []
-        for _ in range(4):
-            old_goals.append(replay_buffer[np.random.randint(len(replay_buffer))])
-        goals = new_goals + old_goals
-        results = update_policy(env, goals, 5)
-        # results = eval_policy(env, goals)
-        new_r_min, new_r_max = 1E10, 0
+
+    for it in range(max_iters):
+        goals = []
+        for _ in range(num_goals * 2 // 3):
+            d = np.random.rand() * (d_max - d_min) + d_min
+            gx = np.random.rand() * d
+            gy = np.sqrt(d * d - gx * gx)
+            goals.append((gx, gy))
+        while len(goals) < num_goals:
+            goals.append(replay_buffer[np.random.randint(len(replay_buffer))])
+        results = update_policy(env, goals, 5) # This is slow!!!
+        new_d_min, new_d_max = 1E10, 0
         scores = []
         for score, (gx, gy) in results:
             scores.append(score)
-            if score >= score_min and score <= score_max:
-                new_r_min = min(new_r_min, np.sqrt(gx * gx + gy * gy))
-                new_r_max = max(new_r_max, np.sqrt(gx * gx + gy * gy))
+            if score >= r_min and score <= r_max:
+                new_d_min = min(new_d_min, np.sqrt(gx * gx + gy * gy))
+                new_d_max = max(new_d_max, np.sqrt(gx * gx + gy * gy))
         scores = np.array(scores)
-        if new_r_min > new_r_max:
+        if new_d_min > new_d_max:
             print("WARNING: new_r_min > new_r_max")
         else:
-            r_min, r_max = new_r_min, new_r_max * 1.1
-        for gx, gy in new_goals:
+            d_min, d_max = new_d_min, new_d_max * 1.1
+
+        for gx, gy in goals:
             novel = True
             for old_gx, old_gy in replay_buffer:
                 dx = old_gx - gx
@@ -185,18 +182,20 @@ def train(env_name,
                     break
             if novel:
                 replay_buffer.append((gx, gy))
+
         logger.log("********** Iteration %i ************" % (it))
-        logger.record_tabular("Rmin", r_min)
-        logger.record_tabular("Rmax", r_max)
-        logger.record_tabular("Score_max", np.max(scores))
-        logger.record_tabular("Score_min", np.min(scores))
-        logger.record_tabular("Score_med", np.median(scores))
-        if it % 10 == 0:
+        logger.record_tabular("d_min", d_min)
+        logger.record_tabular("d_max", d_max)
+        logger.record_tabular("score_max", np.max(scores))
+        logger.record_tabular("score_min", np.min(scores))
+        logger.record_tabular("score_med", np.median(scores))
+        logger.record_tabular("score_mean", np.mean(scores))
+        if it % 1 == 0:
             coverage = 0
             for _ in range(100):
-                r = np.random.rand() * 5
-                gx = np.random.rand() * r
-                gy = np.sqrt(r * r - gx * gx)
+                d = np.random.rand() * 5
+                gx = np.random.rand() * d
+                gy = np.sqrt(d * d - gx * gx)
                 _, reach = rollout(env, pi, [(gx, gy)], 1)
                 if reach[0] != 0:
                     coverage += 0.01

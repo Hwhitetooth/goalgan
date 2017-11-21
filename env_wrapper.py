@@ -1,11 +1,12 @@
-import gym, roboschool
+import gym
 
 class Env(object):
-    def __init__(self, env_name, target_x = 1E3, target_y = 0.0, eps = 0.5):
+    def __init__(self, env_name, target_x = 1E3, target_y = 0.0, eps = 0.5, timelimit = 500):
         self.env = gym.make(env_name)
         self.env.unwrapped.walk_target_x = target_x
         self.env.unwrapped.walk_target_y = target_y
         self.eps = eps
+        self.timelimit = timelimit
         self.step_cnt = 0
 
     def reset(self, new_x = None, new_y = None):
@@ -24,7 +25,7 @@ class Env(object):
             done = True
         else:
             r = 0.0
-        if self.step_cnt == 100:
+        if self.step_cnt == self.timelimit:
             done = True
         return s, r, done, info
 
