@@ -37,7 +37,7 @@ class Env(object):
         return self.env.render()
 
     def seed(self, seed):
-        return env.seed(seed)
+        return self.env.seed(seed)
 
 '''
 if __name__ == "__main__":

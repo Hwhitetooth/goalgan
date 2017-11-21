@@ -158,6 +158,7 @@ def train(env_name,
             goals.append((gx, gy))
         while len(goals) < num_goals:
             goals.append(replay_buffer[np.random.randint(len(replay_buffer))])
+        # draw the goals.
         results = update_policy(env, goals, 5) # This is slow!!!
         new_d_min, new_d_max = 1E10, 0
         scores = []
