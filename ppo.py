@@ -15,11 +15,12 @@ def rollout(env, pi, goals, episodes = None, timesteps = None, render = False):
     if episodes is not None and timesteps is not None:
         raise ValueError("Both episodes and timesteps are not None.")
     s_batch, a_batch, r_batch, v_batch, done_batch = [], [], [], [], []
-    cumulative_reward = 0
+    score = []
     for gx, gy in goals:
         s = env.reset(gx, gy)
         step = 0
         ep = 0
+        total_reward = 0
         while True:
             a, v = pi.get_a_and_v(s[None])
             # FIXME: a bug here
@@ -34,7 +35,7 @@ def rollout(env, pi, goals, episodes = None, timesteps = None, render = False):
             r_batch.append(r)
             v_batch.append(v)
             done_batch.append(done)
-            cumulative_reward += r
+            total_reward += r
             s = s_next
             step += 1
             if done:
@@ -44,12 +45,12 @@ def rollout(env, pi, goals, episodes = None, timesteps = None, render = False):
                     break
             if timesteps is not None and step == timesteps:
                 break
-    normalized_reward = cumulative_reward / episodes if episodes is not None else cumulative_reward / timesteps
+        score.append(total_reward * np.sqrt(gx * gx + gy * gy) / step)
     return {"s": np.array(s_batch),
             "a": np.array(a_batch),
             "r": np.array(r_batch),
             "v": np.array(v_batch),
-            "done": np.array(done_batch)}, normalized_reward
+            "done": np.array(done_batch)}, score
 
 
 def process_data(raw, gamma, lamda):
@@ -84,15 +85,12 @@ def train(env_name,
         policy_fn,
         gamma = 0.998,
         lamda = 0.995,
-        horizon = 2048,
         batch_size = 64,
         epochs = 10,
         lr = 3E-4,
         max_steps = 1000000,
-        clip_eps = 0.2, 
-        entropy_coefficient = 0.0,
-        logdir = "/tmp/ppo_log",
-        save_freqency = 100,
+        clip_eps = 0.2,
+        eps = 0.5,
         render = False):
     env = gym.make(env_name)
     pi = policy_fn(sess, env.observation_space.shape, env.action_space, "pi")
@@ -109,11 +107,8 @@ def train(env_name,
     v_sample = tf.placeholder(tf.float32, [None])
     v_loss = tf.reduce_mean(tf.square(v_sample - pi.v))
 
-    # Loss of entropy.
-    entropy_loss = -tf.reduce_mean(pi.pi.entropy()) * entropy_coefficient
-
-    total_loss = pi_loss + v_loss + entropy_loss
-    losses = [total_loss, pi_loss, v_loss, entropy_loss]
+    total_loss = pi_loss + v_loss
+    losses = [total_loss, pi_loss, v_loss]
     losses_names = ["all", "pi", "v", "entropy"]
 
     # Optimization.
@@ -127,49 +122,55 @@ def train(env_name,
 
     def update_policy(env, goals, iterations = 5):
         for it in range(iterations):
-            raw_data, _ = rollout(env, pi, goals, episodes = 1)
+            raw_data, score = rollout(env, pi, goals, episodes = 1, render = render)
             data = Dataset(process_data(raw_data, gamma, lamda), batch_size)
             sess.run(update_old)
             for _ in range(epochs):
                 for batch in data:
                     train_feed= {pi.inputs: batch["s"], pi_old.inputs: batch["s"], a_taken: batch["a"], \
-                            adv_sample: batch["adv"], v_sample: batch["g"], step: it * horizon}
+                            adv_sample: batch["adv"], v_sample: batch["g"], step: 0}
                     sess.run(train_op, train_feed)
+        return zip(score, goals)
 
+    '''
     def eval_policy(env, goals):
         results = []
         for gx, gy in goals:
-            _, score = rollout(env, pi, [(gx, gy)], timesteps = 100, render = render)
+            _, score = rollout(env, pi, [(gx, gy)], timesteps = 500, render = render)
             results.append((score, (gx, gy)))
         return results
+    '''
 
-    score_min, score_max = 0.06, 0.09
-    env = Env(env_name)
-    r_min, r_max = 0.1, 0.7
-    replay_buffer = deque(maxlen = 50000)
-    for _ in range(100):
+    score_min, score_max = 0.01, 0.02
+    env = Env(env_name, eps = eps)
+    r_min, r_max = 0.5, 0.7
+    replay_buffer = deque(maxlen = 100)
+    for _ in range(1):
         r = np.random.rand() * (r_max - r_min) + r_min
         gx = np.random.rand() * r
         gy = np.sqrt(r * r - gx * gx)
         replay_buffer.append((gx, gy))
     for it in range(10000):
         new_goals = []
-        for _ in range(66):
+        for _ in range(16):
             r = np.random.rand() * (r_max - r_min) + r_min
             gx = np.random.rand() * r
             gy = np.sqrt(r * r - gx * gx)
             new_goals.append((gx, gy))
         old_goals = []
-        for _ in range(34):
+        for _ in range(4):
             old_goals.append(replay_buffer[np.random.randint(len(replay_buffer))])
         goals = new_goals + old_goals
-        update_policy(env, goals, 5)
-        results = eval_policy(env, goals)
+        results = update_policy(env, goals, 5)
+        # results = eval_policy(env, goals)
         new_r_min, new_r_max = 1E10, 0
+        scores = []
         for score, (gx, gy) in results:
+            scores.append(score)
             if score >= score_min and score <= score_max:
                 new_r_min = min(new_r_min, np.sqrt(gx * gx + gy * gy))
                 new_r_max = max(new_r_max, np.sqrt(gx * gx + gy * gy))
+        scores = np.array(scores)
         if new_r_min > new_r_max:
             print("WARNING: new_r_min > new_r_max")
         else:
@@ -179,7 +180,7 @@ def train(env_name,
             for old_gx, old_gy in replay_buffer:
                 dx = old_gx - gx
                 dy = old_gy - gy
-                if np.sqrt(dx * dx + dy * dy) <= 0.5:
+                if np.sqrt(dx * dx + dy * dy) <= eps:
                     novel = False
                     break
             if novel:
@@ -187,4 +188,17 @@ def train(env_name,
         logger.log("********** Iteration %i ************" % (it))
         logger.record_tabular("Rmin", r_min)
         logger.record_tabular("Rmax", r_max)
+        logger.record_tabular("Score_max", np.max(scores))
+        logger.record_tabular("Score_min", np.min(scores))
+        logger.record_tabular("Score_med", np.median(scores))
+        if it % 10 == 0:
+            coverage = 0
+            for _ in range(100):
+                r = np.random.rand() * 5
+                gx = np.random.rand() * r
+                gy = np.sqrt(r * r - gx * gx)
+                _, reach = rollout(env, pi, [(gx, gy)], 1)
+                if reach[0] != 0:
+                    coverage += 0.01
+            logger.record_tabular("Coverage", coverage)
         logger.dump_tabular()

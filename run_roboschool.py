@@ -29,7 +29,7 @@ def main():
 
     def mlp_policy(sess, input_shape, output_size, scope):
         return MLPPolicy(sess, input_shape, output_size, scope)
-    ppo.train(args.env, sess, mlp_policy, lr = args.lr, max_steps = args.max_steps, clip_eps = args.clip_eps, render = args.render, logdir = logdir)
+    ppo.train(args.env, sess, mlp_policy, lr = args.lr, max_steps = args.max_steps, clip_eps = args.clip_eps, render = args.render)
 
 if __name__ == "__main__":
     main()
