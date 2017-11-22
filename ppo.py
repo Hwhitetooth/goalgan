@@ -7,6 +7,7 @@ from collections import deque
 import os
 import time
 from env_wrapper import Env
+import gan_network as nn
 
 
 def rollout(env, pi, goals, episodes = None, timesteps = None, render = False):
@@ -116,6 +117,9 @@ def train(env_name,
     opt = tf.train.AdamOptimizer(lr, epsilon = 1E-5)
     train_op = opt.minimize(total_loss, var_list = pi.vars)
 
+    # LSGAN.
+    lsgan = nn.LSGAN(sess, "lsgan")
+
     # Training.
     sess.run(tf.global_variables_initializer())
 
@@ -131,36 +135,26 @@ def train(env_name,
                     sess.run(train_op, train_feed)
         return zip(score, goals)
 
-    '''
-    def eval_policy(env, goals):
-        results = []
-        for gx, gy in goals:
-            _, score = rollout(env, pi, [(gx, gy)], timesteps = 500, render = render)
-            results.append((score, (gx, gy)))
-        return results
-    '''
-
     env = Env(env_name, eps = eps)
     d_min, d_max = 0.5, 0.7
     replay_buffer = deque(maxlen = 100)
-    for _ in range(1):
+    for _ in range(10):
         d = np.random.rand() * (d_max - d_min) + d_min
         gx = np.random.rand() * d
         gy = np.sqrt(d * d - gx * gx)
         replay_buffer.append((gx, gy))
 
     for it in range(max_iters):
-        goals = []
-        for _ in range(num_goals * 2 // 3):
-            d = np.random.rand() * (d_max - d_min) + d_min
-            gx = np.random.rand() * d
-            gy = np.sqrt(d * d - gx * gx)
-            goals.append((gx, gy))
+        goals = list(lsgan.generate_goals(num_goals * 2 // 3))
+        goals = [(abs(goal[0]), abs(goal[1])) for goal in goals]
         while len(goals) < num_goals:
             goals.append(replay_buffer[np.random.randint(len(replay_buffer))])
         # draw the goals.
-        results = update_policy(env, goals, 5) # This is slow!!!
-        labels = [(int(score >= r_min and score <= r_max), (gx, gy)) for score, (gx, gy) in scores]
+        results = list(update_policy(env, goals, 5)) # This is slow!!!
+        labels = [int(score >= r_min and score <= r_max) for score, (gx, gy) in results]
+        for _ in range(200):
+            lsgan.train_step(labels, np.array(goals))
+
         new_d_min, new_d_max = 1E10, 0
         scores = []
         for score, (gx, gy) in results:
@@ -195,9 +189,8 @@ def train(env_name,
         if it % 1 == 0:
             coverage = 0
             for _ in range(100):
-                d = np.random.rand() * 5
-                gx = np.random.rand() * d
-                gy = np.sqrt(d * d - gx * gx)
+                gx = np.random.rand() * 5
+                gy = np.random.rand() * 5
                 _, reach = rollout(env, pi, [(gx, gy)], 1)
                 if reach[0] != 0:
                     coverage += 0.01
