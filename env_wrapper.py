@@ -38,7 +38,7 @@ class Env(object):
         return self.env.render()
 
     def seed(self, seed):
-        return env.seed(seed)
+        return self.env.seed(seed)
 
 
 class EnvL2(object):
@@ -60,7 +60,11 @@ class EnvL2(object):
 
     def step(self, a):
         self.step_cnt += 1
+        old_dist = self.env.unwrapped.walk_target_dist
         s, r, done, info = self.env.step(a)
+        if done:
+            s = self.env.reset()
+            done = False
         r = -self.env.unwrapped.walk_target_dist
         if self.env.unwrapped.walk_target_dist <= self.eps:
             done = True
@@ -76,7 +80,7 @@ class EnvL2(object):
         return self.env.render()
 
     def seed(self, seed):
-        return env.seed(seed)
+        return self.env.seed(seed)
 
 '''
 if __name__ == "__main__":
