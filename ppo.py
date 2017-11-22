@@ -45,7 +45,7 @@ def rollout(env, pi, goals, episodes = None, timesteps = None, render = False):
                     break
             if timesteps is not None and step == timesteps:
                 break
-        score.append(total_reward * np.sqrt(gx * gx + gy * gy) / step)
+        score.append(int(-r <= 0.5))
     return {"s": np.array(s_batch),
             "a": np.array(a_batch),
             "r": np.array(r_batch),
@@ -152,7 +152,7 @@ def train(env_name,
         for _ in range(100):
             gx = np.random.rand() * 5
             gy = np.random.rand() * 5
-            _, reach = rollout(env, pi, [(gx, gy)], 1)
+            _, reach = rollout(env, pi, [(gx, gy)], 1, render = render)
             if reach[0] != 0:
                 coverage += 0.01
         logger.record_tabular("Coverage", coverage)

@@ -60,9 +60,8 @@ class EnvL2(object):
 
     def step(self, a):
         self.step_cnt += 1
-        old_dis = self.env.unwrapped.walk_target_dist
         s, r, done, info = self.env.step(a)
-        r = old_dis - self.env.unwrapped.walk_target_dist
+        r = -self.env.unwrapped.walk_target_dist
         if self.env.unwrapped.walk_target_dist <= self.eps:
             done = True
         if self.step_cnt == self.timelimit:
