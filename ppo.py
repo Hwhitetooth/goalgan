@@ -6,7 +6,7 @@ import logger
 from collections import deque
 import os
 import time
-from env_wrapper import Env
+from env_wrapper import EnvL2
 
 
 def rollout(env, pi, goals, episodes = None, timesteps = None, render = False):
@@ -131,74 +131,29 @@ def train(env_name,
                     sess.run(train_op, train_feed)
         return zip(score, goals)
 
-    '''
-    def eval_policy(env, goals):
-        results = []
-        for gx, gy in goals:
-            _, score = rollout(env, pi, [(gx, gy)], timesteps = 500, render = render)
-            results.append((score, (gx, gy)))
-        return results
-    '''
-
-    env = Env(env_name, eps = eps)
-    d_min, d_max = 0.5, 0.7
-    replay_buffer = deque(maxlen = 100)
-    for _ in range(1):
-        d = np.random.rand() * (d_max - d_min) + d_min
-        gx = np.random.rand() * d
-        gy = np.sqrt(d * d - gx * gx)
-        replay_buffer.append((gx, gy))
+    env = EnvL2(env_name, eps = eps)
 
     for it in range(max_iters):
         goals = []
-        for _ in range(num_goals * 2 // 3):
-            d = np.random.rand() * (d_max - d_min) + d_min
-            gx = np.random.rand() * d
-            gy = np.sqrt(d * d - gx * gx)
+        d_min, d_max = 1E10, 0
+        for _ in range(num_goals):
+            gx = np.random.rand() * 5
+            gy = np.random.rand() * 5
             goals.append((gx, gy))
-        while len(goals) < num_goals:
-            goals.append(replay_buffer[np.random.randint(len(replay_buffer))])
-        results = update_policy(env, goals, 5) # This is slow!!!
-        labels = [(int(score >= r_min and score <= r_max), (gx, gy)) for score, (gx, gy) in scores]
-        new_d_min, new_d_max = 1E10, 0
-        scores = []
-        for score, (gx, gy) in results:
-            scores.append(score)
-            if score >= r_min and score <= r_max:
-                new_d_min = min(new_d_min, np.sqrt(gx * gx + gy * gy))
-                new_d_max = max(new_d_max, np.sqrt(gx * gx + gy * gy))
-        scores = np.array(scores)
-        if new_d_min > new_d_max:
-            print("WARNING: new_r_min > new_r_max")
-        else:
-            d_min, d_max = new_d_min, new_d_max * 1.1
+            d_min = min(d_min, np.sqrt(gx * gx + gy * gy))
+            d_max = max(d_max, np.sqrt(gx * gx + gy * gy))
 
-        for gx, gy in goals:
-            novel = True
-            for old_gx, old_gy in replay_buffer:
-                dx = old_gx - gx
-                dy = old_gy - gy
-                if np.sqrt(dx * dx + dy * dy) <= eps:
-                    novel = False
-                    break
-            if novel:
-                replay_buffer.append((gx, gy))
+        update_policy(env, goals)
 
         logger.log("********** Iteration %i ************" % (it))
         logger.record_tabular("d_min", d_min)
         logger.record_tabular("d_max", d_max)
-        logger.record_tabular("score_max", np.max(scores))
-        logger.record_tabular("score_min", np.min(scores))
-        logger.record_tabular("score_med", np.median(scores))
-        logger.record_tabular("score_mean", np.mean(scores))
-        if it % 1 == 0:
-            coverage = 0
-            for _ in range(100):
-                d = np.random.rand() * 5
-                gx = np.random.rand() * d
-                gy = np.sqrt(d * d - gx * gx)
-                _, reach = rollout(env, pi, [(gx, gy)], 1)
-                if reach[0] != 0:
-                    coverage += 0.01
-            logger.record_tabular("Coverage", coverage)
+        coverage = 0
+        for _ in range(100):
+            gx = np.random.rand() * 5
+            gy = np.random.rand() * 5
+            _, reach = rollout(env, pi, [(gx, gy)], 1)
+            if reach[0] != 0:
+                coverage += 0.01
+        logger.record_tabular("Coverage", coverage)
         logger.dump_tabular()
