@@ -70,7 +70,7 @@ class LSGAN(object):
             for j in range(20): 
                 gy = (j+1) * 0.03 + 0.1
                 if np.sqrt(gx*gx + gy*gy)<0.55 and len(goals)<100:
-                    print('Goal (', gx, ',', gy, ') Distance', np.sqrt(gx*gx + gy*gy))
+                    #print('Goal (', gx, ',', gy, ') Distance', np.sqrt(gx*gx + gy*gy))
                     goals.append([gx, gy])
                     labels.append(1)
         for i in range(10000):
