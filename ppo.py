@@ -8,9 +8,25 @@ import os
 import time
 from env_wrapper import Env
 import gan_network as nn
+import matplotlib.pyplot as plt
+plt.switch_backend('agg')
 
+def plot_results(results,it, rmin, rmax, logdir):
+    #print('Plot %d result items'%len(results))
+    for score, (gx,gy) in results:
+        if score < rmin:
+            plt.scatter(gx, gy, c='b')
+        elif score < rmax:
+            plt.scatter(gx, gy, c='g')
+        else:
+            plt.scatter(gx, gy, c='r')
+    plt.xlim(0,5)
+    plt.ylim(0,5)
+    plt.savefig(logdir+'/'+str(it)+'.png') 
+    plt.close()
 
 def rollout(env, pi, goals, episodes = None, timesteps = None, render = False):
+    #print('A new rollout starts for 100 goals')
     if episodes is None and timesteps is None:
         raise ValueError("Both episodes and timesteps are None.")
     if episodes is not None and timesteps is not None:
@@ -46,7 +62,9 @@ def rollout(env, pi, goals, episodes = None, timesteps = None, render = False):
                     break
             if timesteps is not None and step == timesteps:
                 break
-        score.append(total_reward * np.sqrt(gx * gx + gy * gy) / step)
+        g_score = total_reward * np.sqrt(gx * gx + gy * gy) / step
+        print('Goal (',gx, ',', gy, ') Distance', np.sqrt(gx * gx + gy * gy) , 'Score', g_score)
+        score.append(g_score)
     return {"s": np.array(s_batch),
             "a": np.array(a_batch),
             "r": np.array(r_batch),
@@ -83,17 +101,18 @@ def process_data(raw, gamma, lamda):
 def train(env_name,
         sess,
         policy_fn,
+        logdir,
         gamma = 0.998,
         lamda = 0.995,
         batch_size = 64,
         epochs = 10,
         lr = 3E-4,
         clip_eps = 0.2,
-        max_iters = 300,
+        max_iters = 1000,
         eps = 0.5,
         num_goals = 100,
-        r_min = 0.01,
-        r_max = 0.02,
+        r_min = 0.001,
+        r_max = 0.2,
         render = False):
     env = gym.make(env_name)
     pi = policy_fn(sess, env.observation_space.shape, env.action_space, "pi")
@@ -122,7 +141,8 @@ def train(env_name,
 
     # Training.
     sess.run(tf.global_variables_initializer())
-
+    lsgan.train_init()
+    
     def update_policy(env, goals, iterations = 5):
         for it in range(iterations):
             raw_data, score = rollout(env, pi, goals, episodes = 1, render = render)
@@ -138,7 +158,7 @@ def train(env_name,
     env = Env(env_name, eps = eps)
     d_min, d_max = 0.5, 0.7
     replay_buffer = deque(maxlen = 100)
-    for _ in range(10):
+    for _ in range(100):
         d = np.random.rand() * (d_max - d_min) + d_min
         gx = np.random.rand() * d
         gy = np.sqrt(d * d - gx * gx)
@@ -151,8 +171,11 @@ def train(env_name,
             goals.append(replay_buffer[np.random.randint(len(replay_buffer))])
         # draw the goals.
         results = list(update_policy(env, goals, 5)) # This is slow!!!
-        labels = [int(score >= r_min and score <= r_max) for score, (gx, gy) in results]
-        for _ in range(200):
+        plot_results(results, it, r_min, r_max, logdir)
+        labels = [int(score >= r_min and score <= r_max and np.sqrt(gx*gy+gx*gy)>0.1) for score, (gx, gy) in results]
+        #for i in range(len(labels)):
+            #print('Goal (', goals[i][0], ',', goals[i][1], ') Distance', np.sqrt(goals[i][0]*goals[i][0]+goals[i][1]*goals[i][1]), 'label', labels[i])
+        for _ in range(10000):
             lsgan.train_step(labels, np.array(goals))
 
         new_d_min, new_d_max = 1E10, 0

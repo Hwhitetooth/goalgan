@@ -11,11 +11,11 @@ def main():
     parser.add_argument("--seed", help = "Random seed", type = int, default = 0)
     parser.add_argument("--lr", help = "Initial learning rate", type = float, default = 3E-4)
     parser.add_argument("--clip_eps", help = "Clipping parameter", type = float, default = 0.2)
-    parser.add_argument("--logdir", help = "Logging directory", default = "~/log")
+    parser.add_argument("--logdir", help = "Logging directory", default = "log")
     parser.add_argument("--max_iters", help = "Max training iterations", type = int, default = 300)
     parser.add_argument("--num_goals", help = "Number of goals per policy update", type = int, default = 100)
-    parser.add_argument("--r_min", help = "Lower bound of proper goals range", type = float, default = 0.01)
-    parser.add_argument("--r_max", help = "Upper bound of proper goals range", type = float, default = 0.02)
+    parser.add_argument("--r_min", help = "Lower bound of proper goals range", type = float, default = 0.005)
+    parser.add_argument("--r_max", help = "Upper bound of proper goals range", type = float, default = 0.1)
     parser.add_argument("--render", help = "Render or not", type = bool, default = False)
     args = parser.parse_args()
 
@@ -24,13 +24,13 @@ def main():
     sess = tf.Session(config = config)
 
     logdir = os.path.expanduser(args.logdir)
-    logdir += "/" + args.env + "/" + time.strftime("%Y_%m_%dT%H:%M:%S", time.localtime())
+    logdir += "/" + args.env + "/" + 'rmin%g'%args.r_min + '_rmax%g'%args.r_max+'_'+time.strftime("%Y_%m_%dT%H:%M:%S", time.localtime())
     if not os.path.exists(logdir):
         os.makedirs(logdir)
 
     def mlp_policy(sess, input_shape, output_size, scope):
         return MLPPolicy(sess, input_shape, output_size, scope)
-    ppo.train(args.env, sess, mlp_policy, lr = args.lr, clip_eps = args.clip_eps,
+    ppo.train(args.env, sess, mlp_policy, logdir, lr = args.lr, clip_eps = args.clip_eps,
               max_iters = args.max_iters, num_goals = args.num_goals, r_min = args.r_min, r_max = args.r_max,
               render = args.render)
 
