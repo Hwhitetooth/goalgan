@@ -31,20 +31,20 @@ class LSGAN(object):
         self.G_loss = tf.reduce_mean(tf.square(self.DGZ - self.c))
         self.D_loss = tf.reduce_mean(self.inp_label * tf.square(self.DX - self.b)+ (1 - self.inp_label) * tf.square(self.DX - self.a) + tf.square(self.DGZ - self.a)) 
 
-        
+        """       
         self.init_G_loss = tf.reduce_mean(tf.square(self.DGZ-1))
         self.init_D_loss = tf.reduce_mean(tf.square(self.DX-1)+tf.square(self.DGZ))        
-
+        """
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(update_ops):
             self.G_train = tf.train.AdamOptimizer(learning_rate=g_learning_rate).minimize(self.G_loss, var_list=get_vars('G'))
             self.D_train = tf.train.AdamOptimizer(learning_rate=d_learning_rate).minimize(self.D_loss, var_list=get_vars('D'))
-
+        """
         init_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(init_update_ops):
             self.init_G_train = tf.train.AdamOptimizer(learning_rate=g_learning_rate, beta1=beta1).minimize(self.init_G_loss, var_list=get_vars('G'))            
             self.init_D_train = tf.train.AdamOptimizer(learning_rate=d_learning_rate, beta1=beta1).minimize(self.init_D_loss, var_list=get_vars('D'))
-
+        """
 
 
     def bn_func_gen(self, x, training=True):
@@ -64,6 +64,7 @@ class LSGAN(object):
      
     def train_init(self):
         goals = []
+        labels = []
         for i in range(20):
             gx = (i+1) * 0.03 + 0.1
             for j in range(20): 
@@ -71,10 +72,11 @@ class LSGAN(object):
                 if np.sqrt(gx*gx + gy*gy)<0.55 and len(goals)<100:
                     print('Goal (', gx, ',', gy, ') Distance', np.sqrt(gx*gx + gy*gy))
                     goals.append([gx, gy])
+                    labels.append(1)
         for i in range(10000):
             noise = np.random.normal(0, 1, size=[100, 4])
-            [_, d_loss] = self.sess.run([self.init_D_train, self.init_D_loss], feed_dict={self.inp_goal: goals, self.inp_noise: noise})
-            [_, g_loss] = self.sess.run([self.init_G_train, self.init_G_loss], feed_dict={self.inp_goal: goals, self.inp_noise: noise})
+            [_, d_loss] = self.sess.run([self.D_train, self.D_loss], feed_dict={self.inp_goal: goals, self.inp_label:labels, self.inp_noise: noise})
+            [_, g_loss] = self.sess.run([self.G_train, self.G_loss], feed_dict={self.inp_goal: goals, self.inp_label:labels,self.inp_noise: noise})
             #print('G loss', g_loss, 'D loss', d_loss)
     """
 
