@@ -191,7 +191,9 @@ def train(env_name,
         else:
             d_min, d_max = new_d_min, new_d_max * 1.1
 
-        for gx, gy in goals:
+        for score, (gx, gy) in results:
+            if score < r_min or score > r_max:
+                continue
             novel = True
             for old_gx, old_gy in replay_buffer:
                 dx = old_gx - gx
