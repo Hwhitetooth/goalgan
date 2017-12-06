@@ -8,7 +8,7 @@ def get_vars(scope):
 
 class LSGAN(object):
 
-    def __init__(self, sess, scope, g_learning_rate=0.0001, d_learning_rate=0.0001, beta1=0.5, reuse=None, is_training=True):
+    def __init__(self, sess, scope, g_learning_rate=0.0005, d_learning_rate=0.0005, beta1=0.5, reuse=None, is_training=True):
         self.scope = scope
         self.reuse = reuse
         self.is_training = is_training
@@ -22,7 +22,7 @@ class LSGAN(object):
 
         self.GZ = self.make_generator_network(self.inp_noise, reuse=False)
         self.DX = self.make_discriminator_network(self.inp_goal, reuse=False)
-        self.DGZ = self.make_discriminator_network(self.GZ, reuse=True)
+        self.DGZ = self.make_discriminator_network(self.GZ, reuse=True, is_training=True)
 
         self.a, self.b, self.c = -1, 1, 0
 
@@ -48,14 +48,14 @@ class LSGAN(object):
 
 
     def bn_func_gen(self, x, training=True):
-        if self.use_batchnorm:
+        if self.use_batchnorm and False:
             return leaky_relu(tf.layers.batch_normalization(x, training=training))
         else:
             return leaky_relu(x)
         #return tf.nn.relu(x)
 
     def bn_func_disc(self, x, training=True):
-        if self.use_batchnorm and False:
+        if self.use_batchnorm:
             #return leaky_relu(tf.layers.batch_normalization(x, training=training))
             return leaky_relu(tf.layers.batch_normalization(x, training=training))
         else:
@@ -128,7 +128,7 @@ class LSGAN(object):
             x = self.bn_func_gen(tf.layers.dense(x, 500), training=self.is_training)
             x = self.bn_func_gen(leaky_relu(tf.layers.dense(x, 500)))
             # x = self.bn_func_gen(tf.layers.dense(x, 100, activation=None), training=self.is_training)
-            x = tf.nn.tanh(tf.layers.dense(x, 2))
+            x = tf.layers.dense(x, 2)
             #x = tf.clip_by_value(x, 0,5)
             #x = self.bn_func_gen(tf.layers.conv2d_transpose(tf.reshape(x, [-1, 8, 8, 256]), 256, 5, 2, padding='SAME', activation=None), training=self.is_training)
             #x = self.bn_func_gen(tf.layers.conv2d_transpose(x, 256, 5, 1, padding='SAME', activation=None), training=self.is_training) # 16 x 16
@@ -140,11 +140,11 @@ class LSGAN(object):
             #print(x)
         return x
 
-    def make_discriminator_network(self, goal, reuse):
+    def make_discriminator_network(self, goal, reuse, is_training=True):
         with tf.variable_scope('D', reuse=reuse):
-            x = self.bn_func_disc(tf.layers.dense(goal, 256), training=self.is_training)
-            x = self.bn_func_disc(tf.layers.dense(x, 256), training=self.is_training)
-            x = self.bn_func_disc(tf.layers.dense(x, 256), training=self.is_training)
+            x = self.bn_func_disc(tf.layers.dense(goal, 256), training=self.is_training and is_training)
+            x = self.bn_func_disc(tf.layers.dense(x, 256), training=self.is_training and is_training)
+            x = self.bn_func_disc(tf.layers.dense(x, 256), training=self.is_training and is_training)
             x = tf.layers.dense(x, 1)
             x = tf.nn.tanh(x)
             #x = tf.layers.conv2d(image, 64, 5, 2, padding='SAME', activation=leaky_relu) # 16

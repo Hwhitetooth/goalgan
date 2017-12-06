@@ -27,14 +27,16 @@ def get_batch_disk(batch_size, r_max=0.2, r_min=0.5):
     goals = np.concatenate([X[:, None], Y[:, None]], axis=1)
     return goals, labels
 
-#goals, labels = get_batch_disk2(32)
+#goals, labels = get_batch_disk(32)
 #for i in range(32):
-#    print(np.sqrt(goals[i, 0]**2 + goals[i, 1]**2), labels[i])
+#    print(goals[i, 0] > 0, goals[i, 1] > 0, labels[i])
 
 
 def scatter_plot(goals, i):
     f, ax = plt.subplots()
     ax.scatter(goals[:, 0], goals[:, 1], color='blue')
+    ax.set_xlim([-1, 1])
+    ax.set_ylim([-1, 1])
     f.savefig('./samples/sample%s.png' % i)
 
 
@@ -48,11 +50,11 @@ def main():
     sess.run(tf.global_variables_initializer())
     while True:
 
-        goals, labels = get_batch_disk(32)
+        goals, labels = get_batch_disk(64)
         d_loss = lsgan.train_discriminator(labels, goals)
 
         for _ in range(2):
-            goals, labels = get_batch_disk(32)
+            goals, labels = get_batch_disk(64)
             g_loss = lsgan.train_generator(labels, goals)
 
         if i % 500 == 0:
