@@ -5,23 +5,36 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def get_batch_disk(batch_size, r_max=0.2, r_min=0.5):
-    R = np.random.uniform(0, 1, size=batch_size)
+def get_batch_disk2(batch_size, r_max=0.2, r_min=0.5):
+    #B = np.random.binomial(1, 0.5, size=batch_size)
+    R = np.random.uniform(0.2, 0.5, size=batch_size)
     THETA = np.random.uniform(0, 2*np.pi, size=batch_size)
     X, Y = R*np.cos(THETA), R*np.sin(THETA)
     label_bool = (R < r_min) & (R > r_max)
-    labels = np.zeros_like(label_bool)
-    labels[label_bool > 0] = 1
-    labels[label_bool < 0] = -1
+    labels = np.ones_like(label_bool)
+    #labels[label_bool > 0] = 1
     goals = np.concatenate([X[:, None], Y[:, None]], axis=1)
     return goals, labels
 
 
+def get_batch_disk(batch_size, r_max=0.2, r_min=0.5):
+    R = np.random.uniform(0.2, 0.5, size=batch_size)
+    THETA = np.random.uniform(0, 2*np.pi, size=batch_size)
+    X, Y = R*np.cos(THETA), R*np.sin(THETA)
+    label_bool = (R < r_min) & (R > r_max)
+    labels = np.zeros_like(label_bool, dtype=np.float32)
+    labels[label_bool > 0] = 1
+    goals = np.concatenate([X[:, None], Y[:, None]], axis=1)
+    return goals, labels
+
+#goals, labels = get_batch_disk2(32)
+#for i in range(32):
+#    print(np.sqrt(goals[i, 0]**2 + goals[i, 1]**2), labels[i])
+
 
 def scatter_plot(goals, i):
     f, ax = plt.subplots()
-    for goal in goals:
-        ax.scatter([goal[0]], [goal[1]], color='blue')
+    ax.scatter(goals[:, 0], goals[:, 1], color='blue')
     f.savefig('./samples/sample%s.png' % i)
 
 
@@ -34,14 +47,17 @@ def main():
     lsgan = nn.LSGAN(sess, 'lsgan')
     sess.run(tf.global_variables_initializer())
     while True:
+
         goals, labels = get_batch_disk(32)
-        lsgan.train_step(labels, goals)
+        d_loss = lsgan.train_discriminator(labels, goals)
 
-        g_loss, d_loss = lsgan.train_step(labels, goals)
-        goals = lsgan.generate_goals(1000)
+        for _ in range(2):
+            goals, labels = get_batch_disk(32)
+            g_loss = lsgan.train_generator(labels, goals)
 
-        if i % 1000 == 0:
-            scatter_plot(goals, i // 1000)
+        if i % 500 == 0:
+            goals = lsgan.generate_goals(1000)
+            scatter_plot(goals, i // 500)
         #img = cv2.resize(255*generated[0][::-1], (400, 400), interpolation=cv2.INTER_NEAREST)
         i += 1
         print(i, g_loss, d_loss)

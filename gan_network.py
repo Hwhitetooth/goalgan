@@ -8,7 +8,7 @@ def get_vars(scope):
 
 class LSGAN(object):
 
-    def __init__(self, sess, scope, g_learning_rate=0.00001, d_learning_rate=0.00001, beta1=0.5, reuse=None, is_training=True):
+    def __init__(self, sess, scope, g_learning_rate=0.0001, d_learning_rate=0.0001, beta1=0.5, reuse=None, is_training=True):
         self.scope = scope
         self.reuse = reuse
         self.is_training = is_training
@@ -18,7 +18,7 @@ class LSGAN(object):
         #self.inp_noise = tf.placeholder(tf.float32, [None, 1024])
         self.inp_goal= tf.placeholder(tf.float32, [None, 2])
         self.inp_label = tf.placeholder(tf.float32, [None])
-        self.inp_noise = tf.placeholder(tf.float32, [None, 4])
+        self.inp_noise = tf.placeholder(tf.float32, [None, 100])
 
         self.GZ = self.make_generator_network(self.inp_noise, reuse=False)
         self.DX = self.make_discriminator_network(self.inp_goal, reuse=False)
@@ -29,7 +29,7 @@ class LSGAN(object):
         #self.G_loss = 0.5 * tf.reduce_mean(tf.square(self.DGZ - self.c))
         #self.D_loss = 0.5 * tf.reduce_mean(self.inp_label * tf.square(self.DX - self.b)+ (1 - self.inp_label) * tf.square(self.DX - self.a) + tf.square(self.DGZ - self.a))
         self.G_loss = tf.reduce_mean(tf.square(self.DGZ - self.c))
-        self.D_loss = tf.reduce_mean(self.inp_label * tf.square(self.DX - self.b)+ (1 - self.inp_label) * tf.square(self.DX - self.a) + tf.square(self.DGZ - self.a)) 
+        self.D_loss = tf.reduce_mean(self.inp_label * tf.square(self.DX - self.b) + (1 - self.inp_label) * tf.square(self.DX - self.a) + tf.square(self.DGZ - self.a))
 
         
         self.init_G_loss = tf.reduce_mean(tf.square(self.DGZ-1))
@@ -37,8 +37,8 @@ class LSGAN(object):
 
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(update_ops):
-            self.G_train = tf.train.AdamOptimizer(learning_rate=g_learning_rate).minimize(self.G_loss, var_list=get_vars('G'))
-            self.D_train = tf.train.AdamOptimizer(learning_rate=d_learning_rate).minimize(self.D_loss, var_list=get_vars('D'))
+            self.G_train = tf.train.RMSPropOptimizer(learning_rate=g_learning_rate).minimize(self.G_loss, var_list=get_vars('G'))
+            self.D_train = tf.train.RMSPropOptimizer(learning_rate=d_learning_rate).minimize(self.D_loss, var_list=get_vars('D'))
 
         init_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(init_update_ops):
@@ -49,18 +49,18 @@ class LSGAN(object):
 
     def bn_func_gen(self, x, training=True):
         if self.use_batchnorm:
-            return tf.nn.relu(tf.layers.batch_normalization(x, training=training))
+            return leaky_relu(tf.layers.batch_normalization(x, training=training))
         else:
-            return tf.nn.relu(x)
+            return leaky_relu(x)
         #return tf.nn.relu(x)
 
     def bn_func_disc(self, x, training=True):
-        if self.use_batchnorm:
+        if self.use_batchnorm and False:
             #return leaky_relu(tf.layers.batch_normalization(x, training=training))
-            return tf.nn.relu(tf.layers.batch_normalization(x, training=training))
+            return leaky_relu(tf.layers.batch_normalization(x, training=training))
         else:
             #return leaky_relu(x)
-            return tf.nn.relu(x)
+            return leaky_relu(x)
      
     def train_init(self):
         goals = []
@@ -103,27 +103,32 @@ class LSGAN(object):
             print('G loss', g_loss, 'D loss', d_loss)
     """
 
-    def train_step(self, labels, goals):
+    def train_discriminator(self, labels, goals):
         batch_size = len(goals)
-        noise1 = np.random.normal(0, 1, size=[batch_size, 4])
-        noise2 = np.random.normal(0, 1, size=[batch_size, 4])
-        [_, d_loss] = self.sess.run([self.D_train, self.D_loss], feed_dict={self.inp_goal: goals, self.inp_label: labels, self.inp_noise: noise1})
-        [_, g_loss] = self.sess.run([self.G_train, self.G_loss], feed_dict={self.inp_noise: noise2, self.inp_goal: goals, self.inp_label: labels})
+        noise = np.random.normal(0, 1, size=[batch_size, 100])
+        [_, d_loss] = self.sess.run([self.D_train, self.D_loss], feed_dict={self.inp_goal: goals, self.inp_label: labels, self.inp_noise: noise})
         #print('G loss', g_loss, 'D loss', d_loss)
-        return g_loss, d_loss,
-    
+        return d_loss
+
+
+    def train_generator(self, labels, goals):
+        batch_size = len(goals)
+        noise = np.random.normal(0, 1, size=[batch_size, 100])
+        [_, g_loss] = self.sess.run([self.G_train, self.G_loss], feed_dict={self.inp_noise: noise, self.inp_goal: goals, self.inp_label: labels})
+        return g_loss
     def generate_goals(self, num_goals):
-        noise = np.random.normal(0, 1, size=[num_goals, 4])
+        noise = np.random.normal(0, 1, size=[num_goals, 100])
         [gen] = self.sess.run([self.GZ], feed_dict={self.inp_noise: noise})
         return gen
     
 
     def make_generator_network(self, noise, reuse):
         with tf.variable_scope('G', reuse=reuse):
-            x = self.bn_func_gen(tf.layers.dense(noise, 128), training=self.is_training)
-            x = self.bn_func_gen(tf.layers.dense(x, 128), training=self.is_training)
+            x = self.bn_func_gen(tf.layers.dense(noise, 500), training=self.is_training)
+            x = self.bn_func_gen(tf.layers.dense(x, 500), training=self.is_training)
+            x = self.bn_func_gen(leaky_relu(tf.layers.dense(x, 500)))
             # x = self.bn_func_gen(tf.layers.dense(x, 100, activation=None), training=self.is_training)
-            x = tf.layers.dense(x, 2)
+            x = tf.nn.tanh(tf.layers.dense(x, 2))
             #x = tf.clip_by_value(x, 0,5)
             #x = self.bn_func_gen(tf.layers.conv2d_transpose(tf.reshape(x, [-1, 8, 8, 256]), 256, 5, 2, padding='SAME', activation=None), training=self.is_training)
             #x = self.bn_func_gen(tf.layers.conv2d_transpose(x, 256, 5, 1, padding='SAME', activation=None), training=self.is_training) # 16 x 16
@@ -138,6 +143,7 @@ class LSGAN(object):
     def make_discriminator_network(self, goal, reuse):
         with tf.variable_scope('D', reuse=reuse):
             x = self.bn_func_disc(tf.layers.dense(goal, 256), training=self.is_training)
+            x = self.bn_func_disc(tf.layers.dense(x, 256), training=self.is_training)
             x = self.bn_func_disc(tf.layers.dense(x, 256), training=self.is_training)
             x = tf.layers.dense(x, 1)
             x = tf.nn.tanh(x)
