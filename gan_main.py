@@ -18,7 +18,7 @@ def get_batch_disk2(batch_size, r_max=0.2, r_min=0.5):
 
 
 def get_batch_disk(batch_size, r_max=0.2, r_min=0.5):
-    R = np.random.uniform(0.2, 0.5, size=batch_size)
+    R = np.random.uniform(0.1, 0.6, size=batch_size)
     THETA = np.random.uniform(0, 2*np.pi, size=batch_size)
     X, Y = R*np.cos(THETA), R*np.sin(THETA)
     label_bool = (R < r_min) & (R > r_max)
