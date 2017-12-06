@@ -141,7 +141,7 @@ def train(env_name,
 
     # Training.
     sess.run(tf.global_variables_initializer())
-    lsgan.train_init()
+    #lsgan.train_init()
     
     def update_policy(env, goals, iterations = 5):
         for it in range(iterations):
@@ -166,15 +166,14 @@ def train(env_name,
 
     for it in range(max_iters):
         goals = list(lsgan.generate_goals(num_goals * 2 // 3))
-        goals = [(abs(goal[0]), abs(goal[1])) for goal in goals]
         while len(goals) < num_goals:
             goals.append(replay_buffer[np.random.randint(len(replay_buffer))])
+        abs_goals = [(abs(goal[0]), abs(goal[1])) for goal in goals]
         # draw the goals.
-        results = list(update_policy(env, goals, 5)) # This is slow!!!
+        results = list(update_policy(env, abs_goals, 5)) # This is slow!!!
         plot_results(results, it, r_min, r_max, logdir)
+
         labels = [int(score >= r_min and score <= r_max and np.sqrt(gx*gy+gx*gy)>0.1) for score, (gx, gy) in results]
-        #for i in range(len(labels)):
-            #print('Goal (', goals[i][0], ',', goals[i][1], ') Distance', np.sqrt(goals[i][0]*goals[i][0]+goals[i][1]*goals[i][1]), 'label', labels[i])
         for _ in range(10000):
             lsgan.train_step(labels, np.array(goals))
 

@@ -116,6 +116,13 @@ class LSGAN(object):
         noise = np.random.normal(0, 1, size=[batch_size, 100])
         [_, g_loss] = self.sess.run([self.G_train, self.G_loss], feed_dict={self.inp_noise: noise, self.inp_goal: goals, self.inp_label: labels})
         return g_loss
+
+    def train_step(self, labels, goals):
+        d_loss = self.train_discriminator(labels, goals)
+        for _ in range(2):
+            g_loss = self.train_generator(labels, goals)
+        return g_loss, d_loss
+
     def generate_goals(self, num_goals):
         noise = np.random.normal(0, 1, size=[num_goals, 100])
         [gen] = self.sess.run([self.GZ], feed_dict={self.inp_noise: noise})
