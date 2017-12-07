@@ -62,8 +62,7 @@ def rollout(env, pi, goals, episodes = None, timesteps = None, render = False):
                     break
             if timesteps is not None and step == timesteps:
                 break
-        g_score = total_reward * np.sqrt(gx * gx + gy * gy) / step
-        print('Goal (',gx, ',', gy, ') Distance', np.sqrt(gx * gx + gy * gy) , 'Score', g_score)
+        g_score = total_reward
         score.append(g_score)
     return {"s": np.array(s_batch),
             "a": np.array(a_batch),
@@ -144,8 +143,10 @@ def train(env_name,
     #lsgan.train_init()
     
     def update_policy(env, goals, iterations = 5):
+        scores = []
         for it in range(iterations):
             raw_data, score = rollout(env, pi, goals, episodes = 1, render = render)
+            scores.append(score)
             data = Dataset(process_data(raw_data, gamma, lamda), batch_size)
             sess.run(update_old)
             for _ in range(epochs):
@@ -153,12 +154,15 @@ def train(env_name,
                     train_feed= {pi.inputs: batch["s"], pi_old.inputs: batch["s"], a_taken: batch["a"], \
                             adv_sample: batch["adv"], v_sample: batch["g"], step: 0}
                     sess.run(train_op, train_feed)
-        return zip(score, goals)
+        scores = np.array(scores)
+        scores = np.mean(scores, axis=0)
+        scores = list(scores)
+        return zip(scores, goals)
 
     env = Env(env_name, eps = eps)
-    d_min, d_max = 0.5, 0.7
     replay_buffer = deque(maxlen = 100)
-    for _ in range(100):
+    d_min, d_max = 0.5, 0.7
+    for _ in range(1):
         d = np.random.rand() * (d_max - d_min) + d_min
         gx = np.random.rand() * d
         gy = np.sqrt(d * d - gx * gx)
@@ -173,25 +177,22 @@ def train(env_name,
         results = list(update_policy(env, abs_goals, 5)) # This is slow!!!
         plot_results(results, it, r_min, r_max, logdir)
 
-        labels = [int(score >= r_min and score <= r_max and np.sqrt(gx*gy+gx*gy)>0.1) for score, (gx, gy) in results]
+        labels = [int(score >= r_min and score < r_max and np.sqrt(gx*gy+gx*gy)>0.5) for score, (gx, gy) in results]
         for _ in range(10000):
             lsgan.train_step(labels, np.array(goals))
 
-        new_d_min, new_d_max = 1E10, 0
+        d_min, d_max = 1E10, 0
         scores = []
         for score, (gx, gy) in results:
+            print('Goal (',gx, ',', gy, ') Distance', np.sqrt(gx * gx + gy * gy) , 'Score', score)
             scores.append(score)
-            if score >= r_min and score <= r_max:
-                new_d_min = min(new_d_min, np.sqrt(gx * gx + gy * gy))
-                new_d_max = max(new_d_max, np.sqrt(gx * gx + gy * gy))
+            if score >= r_min and score < r_max:
+                d_min = min(d_min, np.sqrt(gx * gx + gy * gy))
+                d_max = max(d_max, np.sqrt(gx * gx + gy * gy))
         scores = np.array(scores)
-        if new_d_min > new_d_max:
-            print("WARNING: new_r_min > new_r_max")
-        else:
-            d_min, d_max = new_d_min, new_d_max * 1.1
 
         for score, (gx, gy) in results:
-            if score < r_min or score > r_max:
+            if score < r_min or score >= r_max:
                 continue
             novel = True
             for old_gx, old_gy in replay_buffer:
