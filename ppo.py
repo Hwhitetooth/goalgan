@@ -9,7 +9,7 @@ import time
 from env_wrapper import Env
 import gan_network as nn
 import matplotlib.pyplot as plt
-plt.switch_backend('agg')
+plt.switch_backend('Agg')
 
 def plot_results(results,it, rmin, rmax, logdir):
     #print('Plot %d result items'%len(results))
@@ -104,7 +104,7 @@ def train(env_name,
         gamma = 0.998,
         lamda = 0.995,
         batch_size = 64,
-        epochs = 10,
+        epochs = 1,
         lr = 3E-4,
         clip_eps = 0.2,
         max_iters = 1000,
@@ -160,6 +160,7 @@ def train(env_name,
         return zip(scores, goals)
 
     env = Env(env_name, eps = eps)
+    '''
     replay_buffer = deque(maxlen = 100)
     d_min, d_max = 0.5, 0.7
     for _ in range(1):
@@ -167,11 +168,15 @@ def train(env_name,
         gx = np.random.rand() * d
         gy = np.sqrt(d * d - gx * gx)
         replay_buffer.append((gx, gy))
+    '''
 
     for it in range(max_iters):
+        '''
         goals = list(lsgan.generate_goals(num_goals * 2 // 3))
         while len(goals) < num_goals:
             goals.append(replay_buffer[np.random.randint(len(replay_buffer))])
+        '''
+        goals = list(lsgan.generate_goals(num_goals))
         abs_goals = [(abs(goal[0]), abs(goal[1])) for goal in goals]
         # draw the goals.
         results = list(update_policy(env, abs_goals, 5)) # This is slow!!!
@@ -191,6 +196,7 @@ def train(env_name,
                 d_max = max(d_max, np.sqrt(gx * gx + gy * gy))
         scores = np.array(scores)
 
+        '''
         for score, (gx, gy) in results:
             if score < r_min or score >= r_max:
                 continue
@@ -203,6 +209,7 @@ def train(env_name,
                     break
             if novel:
                 replay_buffer.append((gx, gy))
+        '''
 
         logger.log("********** Iteration %i ************" % (it))
         logger.record_tabular("d_min", d_min)

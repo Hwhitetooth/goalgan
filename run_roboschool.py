@@ -13,7 +13,7 @@ def main():
     parser.add_argument("--clip_eps", help = "Clipping parameter", type = float, default = 0.2)
     parser.add_argument("--logdir", help = "Logging directory", default = "log")
     parser.add_argument("--max_iters", help = "Max training iterations", type = int, default = 300)
-    parser.add_argument("--num_goals", help = "Number of goals per policy update", type = int, default = 3)
+    parser.add_argument("--num_goals", help = "Number of goals per policy update", type = int, default = 100)
     parser.add_argument("--r_min", help = "Lower bound of proper goals range", type = float, default = 0.2)
     parser.add_argument("--r_max", help = "Upper bound of proper goals range", type = float, default = 0.8)
     parser.add_argument("--render", help = "Render or not", type = bool, default = False)
