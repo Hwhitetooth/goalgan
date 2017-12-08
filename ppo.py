@@ -8,8 +8,9 @@ import os
 import time
 from env_wrapper import Env
 import gan_network as nn
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-plt.switch_backend('Agg')
 
 def plot_results(results,it, rmin, rmax, logdir):
     #print('Plot %d result items'%len(results))
