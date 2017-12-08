@@ -171,6 +171,9 @@ def train(env_name,
         replay_buffer.append((gx, gy))
     '''
 
+    positive_buffer = deque(maxlen=100)
+    negative_buffer = deque(maxlen=100)
+
     for it in range(max_iters):
         '''
         goals = list(lsgan.generate_goals(num_goals * 2 // 3))
@@ -183,9 +186,23 @@ def train(env_name,
         results = list(update_policy(env, abs_goals, 5)) # This is slow!!!
         plot_results(results, it, r_min, r_max, logdir)
 
-        labels = [int(score >= r_min and score < r_max and np.sqrt(gx*gy+gx*gy)>0.5) for score, (gx, gy) in results]
-        for _ in range(10000):
-            lsgan.train_step(labels, np.array(goals))
+        # labels = [int(score >= r_min and score < r_max and np.sqrt(gx*gy+gx*gy)>0.5) for score, (gx, gy) in results]
+        for score, (gx, gy) in results:
+            if score >= r_min and score < r_max:
+                positive_buffer.append((gx, gy))
+            else:
+                negative_buffer.append((gx, gy))
+        print("positives:", len(positive_buffer))
+        if len(positive_buffer) >= 10:
+            for _ in range(10000):
+                goals, labels = [], []
+                for idx in np.random.randint(0, len(positive_buffer), size=50):
+                    goals.append(positive_buffer[idx])
+                    labels.append(1)
+                for idx in np.random.randint(0, len(negative_buffer), size=50):
+                    goals.append(negative_buffer[idx])
+                    labels.append(0)
+                lsgan.train_step(np.array(labels), np.array(goals))
 
         d_min, d_max = 1E10, 0
         scores = []
