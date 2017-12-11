@@ -12,7 +12,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-def plot_results(results,it, rmin, rmax, logdir):
+def plot_results(results, goals, it, rmin, rmax, logdir):
     #print('Plot %d result items'%len(results))
     for score, (gx,gy) in results:
         if score < rmin:
@@ -21,10 +21,45 @@ def plot_results(results,it, rmin, rmax, logdir):
             plt.scatter(gx, gy, c='g')
         else:
             plt.scatter(gx, gy, c='r')
-    plt.xlim(0,5)
-    plt.ylim(0,5)
-    plt.savefig(logdir+'/'+str(it)+'.png') 
+    plt.savefig(logdir+'/abs_goals_'+str(it)+'.png') 
     plt.close()
+    for k in range(len(results)):
+        score = results[k][0]
+        gx = goals[k][0]
+        gy = goals[k][1]
+        if score < rmin:
+            plt.scatter(gx, gy, c='b')
+        elif score < rmax:
+            plt.scatter(gx, gy, c='g')
+        else:
+            plt.scatter(gx, gy, c='r')
+    plt.savefig(logdir+'/goals_'+str(it)+'.png')
+    plt.close()
+
+def plot_eval_results(results, goals, it, rmin, rmax, logdir):
+    #print('Plot %d result items'%len(results))
+    for score, (gx,gy) in results:
+        if score < rmin:
+            plt.scatter(gx, gy, c='b')
+        elif score < rmax:
+            plt.scatter(gx, gy, c='g')
+        else:
+            plt.scatter(gx, gy, c='r')
+    plt.savefig(logdir+'/eval_abs_goals_'+str(it)+'.png')
+    plt.close()
+    for k in range(len(results)):
+        score = results[k][0]
+        gx = goals[k][0]
+        gy = goals[k][1]
+        if score < rmin:
+            plt.scatter(gx, gy, c='b')
+        elif score < rmax:
+            plt.scatter(gx, gy, c='g')
+        else:
+            plt.scatter(gx, gy, c='r')
+    plt.savefig(logdir+'/eval_goals_'+str(it)+'.png')
+    plt.close()
+
 
 def rollout(env, pi, goals, episodes = None, timesteps = None, render = False):
     #print('A new rollout starts for 100 goals')
@@ -111,8 +146,8 @@ def train(env_name,
         max_iters = 1000,
         eps = 0.5,
         num_goals = 100,
-        r_min = 0.001,
-        r_max = 0.2,
+        r_min = 0.2,
+        r_max = 0.8,
         render = False):
     env = gym.make(env_name)
     pi = policy_fn(sess, env.observation_space.shape, env.action_space, "pi")
@@ -141,7 +176,7 @@ def train(env_name,
 
     # Training.
     sess.run(tf.global_variables_initializer())
-    #lsgan.train_init()
+    lsgan.train_init()
     
     def update_policy(env, goals, iterations = 5):
         scores = []
@@ -150,58 +185,52 @@ def train(env_name,
             scores.append(score)
             data = Dataset(process_data(raw_data, gamma, lamda), batch_size)
             sess.run(update_old)
-            for _ in range(epochs):
-                for batch in data:
-                    train_feed= {pi.inputs: batch["s"], pi_old.inputs: batch["s"], a_taken: batch["a"], \
+            if(it==0):
+                for _ in range(epochs):
+                    for batch in data:
+                        train_feed= {pi.inputs: batch["s"], pi_old.inputs: batch["s"], a_taken: batch["a"], \
                             adv_sample: batch["adv"], v_sample: batch["g"], step: 0}
-                    sess.run(train_op, train_feed)
+                        sess.run(train_op, train_feed)
         scores = np.array(scores)
         scores = np.mean(scores, axis=0)
         scores = list(scores)
         return zip(scores, goals)
 
+    def evaluate_policy(env, goals, iterations = 5):
+        scores = []
+        for it in range(iterations):
+            raw_data, score = rollout(env, pi, goals, episodes = 1, render = render)
+            scores.append(score)
+        scores = np.array(scores)
+        scores = np.mean(scores, axis=0)
+        scores = list(scores)
+        return zip(scores, goals)
+
+
     env = Env(env_name, eps = eps)
-    '''
+    
     replay_buffer = deque(maxlen = 100)
     d_min, d_max = 0.5, 0.7
-    for _ in range(1):
-        d = np.random.rand() * (d_max - d_min) + d_min
-        gx = np.random.rand() * d
-        gy = np.sqrt(d * d - gx * gx)
+    for _ in range(10):
+        R = np.random.uniform(d_min, d_max)
+        THETA = np.random.uniform(0, 2*np.pi)
+        gx, gy = R*np.cos(THETA), R*np.sin(THETA)
         replay_buffer.append((gx, gy))
-    '''
-
-    positive_buffer = deque(maxlen=100)
-    negative_buffer = deque(maxlen=100)
 
     for it in range(max_iters):
-        '''
         goals = list(lsgan.generate_goals(num_goals * 2 // 3))
         while len(goals) < num_goals:
             goals.append(replay_buffer[np.random.randint(len(replay_buffer))])
-        '''
-        goals = list(lsgan.generate_goals(num_goals))
+        
         abs_goals = [(abs(goal[0]), abs(goal[1])) for goal in goals]
         # draw the goals.
+        results = list(evaluate_policy(env, abs_goals, 5)) # This is slow!!!
+        plot_eval_results(results, goals, it, r_min, r_max, logdir)
         results = list(update_policy(env, abs_goals, 5)) # This is slow!!!
-        plot_results(results, it, r_min, r_max, logdir)
+        plot_results(results, goals, it, r_min, r_max, logdir)
 
-        # labels = [int(score >= r_min and score < r_max and np.sqrt(gx*gy+gx*gy)>0.5) for score, (gx, gy) in results]
-        for score, (gx, gy) in results:
-            if score >= r_min and score < r_max:
-                positive_buffer.append((gx, gy))
-            else:
-                negative_buffer.append((gx, gy))
-        print("positives:", len(positive_buffer))
-        if len(positive_buffer) >= 10:
-            for _ in range(10000):
-                goals, labels = [], []
-                for idx in np.random.randint(0, len(positive_buffer), size=50):
-                    goals.append(positive_buffer[idx])
-                    labels.append(1)
-                for idx in np.random.randint(0, len(negative_buffer), size=50):
-                    goals.append(negative_buffer[idx])
-                    labels.append(0)
+        labels = [int(score >= r_min and score < r_max) for score, (gx, gy) in results]
+        for _ in range(5000):
                 lsgan.train_step(np.array(labels), np.array(goals))
 
         d_min, d_max = 1E10, 0
@@ -214,20 +243,19 @@ def train(env_name,
                 d_max = max(d_max, np.sqrt(gx * gx + gy * gy))
         scores = np.array(scores)
 
-        '''
-        for score, (gx, gy) in results:
-            if score < r_min or score >= r_max:
-                continue
-            novel = True
+        novel = [] 
+        for zzb in range(len(results)):
+            score=results[zzb][0]
+            gx = goals[zzb][0]
+            gy = goals[zzb][1]
             for old_gx, old_gy in replay_buffer:
                 dx = old_gx - gx
                 dy = old_gy - gy
                 if np.sqrt(dx * dx + dy * dy) <= eps:
-                    novel = False
                     break
-            if novel:
-                replay_buffer.append((gx, gy))
-        '''
+            novel.append((gx, gy))
+        replay_buffer.extend(novel)
+        
 
         logger.log("********** Iteration %i ************" % (it))
         logger.record_tabular("d_min", d_min)
