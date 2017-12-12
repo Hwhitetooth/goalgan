@@ -208,30 +208,27 @@ def train(env_name,
 
 
     env = Env(env_name, eps = eps)
-    
-    replay_buffer = deque(maxlen = 100)
-    d_min, d_max = 0.5, 0.7
-    for _ in range(10):
-        R = np.random.uniform(d_min, d_max)
-        THETA = np.random.uniform(0, 2*np.pi)
-        gx, gy = R*np.cos(THETA), R*np.sin(THETA)
-        replay_buffer.append((gx, gy))
 
+    good_goal_buffer = []
     for it in range(max_iters):
-        goals = list(lsgan.generate_goals(num_goals * 2 // 3))
-        while len(goals) < num_goals:
-            goals.append(replay_buffer[np.random.randint(len(replay_buffer))])
-        
+        goals = list(lsgan.generate_goals(num_goals))
+
         abs_goals = [(abs(goal[0]), abs(goal[1])) for goal in goals]
         # draw the goals.
         results = list(evaluate_policy(env, abs_goals, 5)) # This is slow!!!
         plot_eval_results(results, goals, it, r_min, r_max, logdir)
-        results = list(update_policy(env, abs_goals, 5)) # This is slow!!!
-        plot_results(results, goals, it, r_min, r_max, logdir)
-
-        labels = [int(score >= r_min and score < r_max) for score, (gx, gy) in results]
-        for _ in range(5000):
-                lsgan.train_step(np.array(labels), np.array(goals))
+        for i in range(len(results)):
+            gx, gy = goals[i][0], goals[i][1]
+            score = results[i][0]
+            if score >= r_min and score < r_max:
+                good_goal_buffer.append([gx, gy])
+        if len(good_goal_buffer) >= 100:
+            for i in range(5000):
+                lsgan.train_step(np.ones(len(good_goal_buffer)), np.array(good_goal_buffer))
+            abs_goals = [(abs(goal[0]), abs(goal[1])) for goal in good_goal_buffer]
+            results = list(update_policy(env, abs_goals, 5)) # This is slow!!!
+            plot_results(results, good_goal_buffer, it, r_min, r_max, logdir)
+            good_goal_buffer.clear()
 
         d_min, d_max = 1E10, 0
         scores = []
@@ -243,20 +240,6 @@ def train(env_name,
                 d_max = max(d_max, np.sqrt(gx * gx + gy * gy))
         scores = np.array(scores)
 
-        novel = [] 
-        for zzb in range(len(results)):
-            score=results[zzb][0]
-            gx = goals[zzb][0]
-            gy = goals[zzb][1]
-            for old_gx, old_gy in replay_buffer:
-                dx = old_gx - gx
-                dy = old_gy - gy
-                if np.sqrt(dx * dx + dy * dy) <= eps:
-                    break
-            novel.append((gx, gy))
-        replay_buffer.extend(novel)
-        
-
         logger.log("********** Iteration %i ************" % (it))
         logger.record_tabular("d_min", d_min)
         logger.record_tabular("d_max", d_max)
@@ -264,13 +247,13 @@ def train(env_name,
         logger.record_tabular("score_min", np.min(scores))
         logger.record_tabular("score_med", np.median(scores))
         logger.record_tabular("score_mean", np.mean(scores))
-        if it % 1 == 0:
-            coverage = 0
-            for _ in range(100):
-                gx = np.random.rand() * 5
-                gy = np.random.rand() * 5
-                _, reach = rollout(env, pi, [(gx, gy)], 1)
-                if reach[0] != 0:
-                    coverage += 0.01
-            logger.record_tabular("Coverage", coverage)
+        logger.record_tabular("good goals", len(good_goal_buffer))
+        coverage = 0
+        for _ in range(100):
+            gx = np.random.rand() * 5
+            gy = np.random.rand() * 5
+            _, reach = rollout(env, pi, [(gx, gy)], 1)
+            if reach[0] != 0:
+                coverage += 0.01
+        logger.record_tabular("Coverage", coverage)
         logger.dump_tabular()
