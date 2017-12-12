@@ -18,7 +18,7 @@ def get_batch_disk2(batch_size, r_max=0.2, r_min=0.5):
 
 
 def get_batch_disk(batch_size, r_min=0.3, r_max=0.6):
-    R = np.random.uniform(r_min-0.1, r_max+0.1, size=batch_size)
+    R = np.random.uniform(r_min-0.2, r_max, size=batch_size)
     THETA = np.random.uniform(0, 2*np.pi, size=batch_size)
     X, Y = R*np.cos(THETA), R*np.sin(THETA)
     label_bool = (R > r_min) & (R < r_max)
@@ -54,20 +54,18 @@ def main():
     sess = tf.Session(config=config)
     lsgan = nn.LSGAN(sess, 'lsgan')
     sess.run(tf.global_variables_initializer())
-    for j in range(3,30):
-        r_min = j*0.1
-        r_max=j*0.1+0.1
-        training_goals, training_labels = get_batch_disk(100, r_min, r_max)
-        scatter_plot(training_goals, j,-1, r_min, r_max)
-        for i in range(0,10000) :
-            indices = np.random.randint(0, 100, 100)
-            d_loss, g_loss = lsgan.train_step(training_labels[indices], training_goals[indices])
+    r_min = 0.5
+    r_max=0.9
+    training_goals, training_labels = get_batch_disk(1000, r_min, r_max)
+    scatter_plot(training_goals, 0,-1, r_min, r_max)
+    for i in range(0,10000) :
+        indices = np.random.randint(0, 1000, 1000)
+        d_loss, g_loss = lsgan.train_step(training_labels[indices], training_goals[indices])
 
-
-            if i % 500 == 0:
-                goals = lsgan.generate_goals(1000)
-                scatter_plot(goals, j, i // 500, r_min, r_max)
-            print(j, i, g_loss, d_loss)
+        if i % 200 == 0:
+            goals = lsgan.generate_goals(1000)
+            scatter_plot(goals, 0, i // 200, r_min, r_max)
+        print(0, i, 'generator loss', g_loss, 'discriminator loss', d_loss)
 
 
 main()
