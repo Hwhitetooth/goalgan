@@ -228,7 +228,13 @@ def train(env_name,
             abs_goals = [(abs(goal[0]), abs(goal[1])) for goal in good_goal_buffer]
             results = list(update_policy(env, abs_goals, 5)) # This is slow!!!
             plot_results(results, good_goal_buffer, it, r_min, r_max, logdir)
+            goals = good_goal_buffer.copy()
             good_goal_buffer.clear()
+            for i in range(len(results)):
+                gx, gy = goals[i][0], goals[i][1]
+                score = results[i][0]
+                if score >= r_min and score < r_max:
+                    good_goal_buffer.append([gx, gy])
 
         d_min, d_max = 1E10, 0
         scores = []
