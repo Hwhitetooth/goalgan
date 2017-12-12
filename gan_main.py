@@ -34,7 +34,14 @@ def get_batch_disk(batch_size, r_min=0.3, r_max=0.6):
 
 def scatter_plot(goals, j, i, r_min, r_max):
     f, ax = plt.subplots()
-    for k in range(goals.shape[0]):
+    R = np.sqrt(goals[:,0]**2 + goals[:,1]**2)
+    red_goals = goals[R < r_min]
+    green_goals = goals[(R > r_min) & (R < r_max)]
+    blue_goals = goals[R > r_max]
+    ax.scatter(red_goals[:, 0], red_goals[:, 1], color='red')
+    ax.scatter(green_goals[:, 0], green_goals[:, 1], color='green')
+    ax.scatter(blue_goals[:, 0], blue_goals[:, 1], color='blue')
+    '''for k in range(goals.shape[0]):
         x = goals[k,0]
         y = goals[k,1]
         if np.sqrt(x*x+y*y) < r_min:
@@ -42,7 +49,7 @@ def scatter_plot(goals, j, i, r_min, r_max):
         elif np.sqrt(x*x+y*y) < r_max:
             ax.scatter(x, y, color='green')
         else:
-            ax.scatter(x, y, color='blue')
+            ax.scatter(x, y, color='blue')'''
     f.savefig('./samples/sample%s_%s.png' % (j,i))
 
 
@@ -58,12 +65,13 @@ def main():
         r_min = j*0.1
         r_max=j*0.1+0.1
         training_goals, training_labels = get_batch_disk(100, r_min, r_max)
+        #training_goals = lsgan.generate_goals(100)
+        #R = np.sqrt(training_goals[:, 0]**2 + training_goals[:, 1]**2)
+        training_labels = (R > r_min) & (R < r_max)
         scatter_plot(training_goals, j,-1, r_min, r_max)
         for i in range(0,10000) :
             indices = np.random.randint(0, 100, 100)
             d_loss, g_loss = lsgan.train_step(training_labels[indices], training_goals[indices])
-
-
             if i % 500 == 0:
                 goals = lsgan.generate_goals(1000)
                 scatter_plot(goals, j, i // 500, r_min, r_max)
