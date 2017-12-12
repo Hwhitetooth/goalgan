@@ -17,13 +17,13 @@ def get_batch_disk2(batch_size, r_max=0.2, r_min=0.5):
     return goals, labels
 
 
-def get_batch_disk(batch_size, r_min=0.3, r_max=0.6):
-    R = np.random.uniform(r_min-0.2, r_max, size=batch_size)
+def get_batch_disk(batch_size, r_min=0.3, r_max=3):
+    R = np.random.uniform(r_min, r_max, size=batch_size)
     THETA = np.random.uniform(0, 2*np.pi, size=batch_size)
     X, Y = R*np.cos(THETA), R*np.sin(THETA)
     label_bool = (R > r_min) & (R < r_max)
     labels = np.zeros_like(label_bool, dtype=np.float32)
-    labels[label_bool > 0] = 1
+    labels[label_bool > 0] =1 
     goals = np.concatenate([X[:, None], Y[:, None]], axis=1)
     return goals, labels
 
@@ -34,7 +34,14 @@ def get_batch_disk(batch_size, r_min=0.3, r_max=0.6):
 
 def scatter_plot(goals, j, i, r_min, r_max):
     f, ax = plt.subplots()
-    for k in range(goals.shape[0]):
+    R = np.sqrt(goals[:,0]**2 + goals[:,1]**2)
+    red_goals = goals[R < r_min]
+    green_goals = goals[(R > r_min) & (R < r_max)]
+    blue_goals = goals[R > r_max]
+    ax.scatter(red_goals[:, 0], red_goals[:, 1], color='red')
+    ax.scatter(green_goals[:, 0], green_goals[:, 1], color='green')
+    ax.scatter(blue_goals[:, 0], blue_goals[:, 1], color='blue')
+    '''for k in range(goals.shape[0]):
         x = goals[k,0]
         y = goals[k,1]
         if np.sqrt(x*x+y*y) < r_min:
@@ -42,7 +49,7 @@ def scatter_plot(goals, j, i, r_min, r_max):
         elif np.sqrt(x*x+y*y) < r_max:
             ax.scatter(x, y, color='green')
         else:
-            ax.scatter(x, y, color='blue')
+            ax.scatter(x, y, color='blue')'''
     f.savefig('./samples/sample%s_%s.png' % (j,i))
 
 
@@ -54,8 +61,8 @@ def main():
     sess = tf.Session(config=config)
     lsgan = nn.LSGAN(sess, 'lsgan')
     sess.run(tf.global_variables_initializer())
-    r_min = 0.5
-    r_max=0.9
+    r_min = 0
+    r_max=1
     training_goals, training_labels = get_batch_disk(1000, r_min, r_max)
     scatter_plot(training_goals, 0,-1, r_min, r_max)
     for i in range(0,10000) :
