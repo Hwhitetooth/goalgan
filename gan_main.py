@@ -67,7 +67,7 @@ def main():
         training_goals, training_labels = get_batch_disk(100, r_min, r_max)
         #training_goals = lsgan.generate_goals(100)
         #R = np.sqrt(training_goals[:, 0]**2 + training_goals[:, 1]**2)
-        training_labels = (R > r_min) & (R < r_max)
+        #training_labels = (R > r_min) & (R < r_max)
         scatter_plot(training_goals, j,-1, r_min, r_max)
         for i in range(0,10000) :
             indices = np.random.randint(0, 100, 100)
