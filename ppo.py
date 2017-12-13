@@ -214,7 +214,7 @@ def train(env_name,
         goals = []
         for replay_idx in range(min(num_goals*1//3, len(replay_buffer))):
             goals.append(replay_buffer[np.random.randint(len(replay_buffer))])
-        goals.extend(lsgan.generate_goals(num_goals-len(training_goals)))
+        goals.extend(lsgan.generate_goals(num_goals-len(goals)))
         goals = np.array(goals) 
         abs_goals = [(abs(goal[0]), abs(goal[1])) for goal in goals]
         # draw the goals.
@@ -224,9 +224,9 @@ def train(env_name,
         plot_results(results, goals, it, r_min, r_max, logdir)
 
         labels = [int(score >= r_min and score <= r_max) for score, (gx, gy) in results]
-        
+        sess.run(tf.variables_initializer(var_list = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='G'))) 
+        sess.run(tf.variables_initializer(var_list = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='D'))) 
         for _ in range(2000):
-            sess.run(tf.variables_initializer(var_list = [tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='G'),tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='D')]))
             lsgan.train_step(np.array(labels), goals)
 
         d_min, d_max = 1E10, 0
@@ -240,8 +240,8 @@ def train(env_name,
         scores = np.array(scores)
 
         for zzb in range(len(goals)):
-            gx = training_goals[zzb][0]
-            gy = training_goals[zzb][1]
+            gx = goals[zzb][0]
+            gy = goals[zzb][1]
             novel=True
             for old_gx, old_gy in replay_buffer:
                 dx = old_gx - gx
