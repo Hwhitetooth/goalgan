@@ -210,28 +210,24 @@ def train(env_name,
     env = Env(env_name, eps = eps)
     
     replay_buffer = deque(maxlen = 100)
-    d_min, d_max = 0.5, 0.7
-    for _ in range(10):
-        R = np.random.uniform(d_min, d_max)
-        THETA = np.random.uniform(0, 2*np.pi)
-        gx, gy = R*np.cos(THETA), R*np.sin(THETA)
-        replay_buffer.append((gx, gy))
-
     for it in range(max_iters):
-        goals = list(lsgan.generate_goals(num_goals * 2 // 3))
-        while len(goals) < num_goals:
+        goals = []
+        for replay_idx in range(min(num_goals*1//3, len(replay_buffer))):
             goals.append(replay_buffer[np.random.randint(len(replay_buffer))])
-        
+        goals.extend(lsgan.generate_goals(num_goals-len(training_goals)))
+        goals = np.array(goals) 
         abs_goals = [(abs(goal[0]), abs(goal[1])) for goal in goals]
         # draw the goals.
-        results = list(evaluate_policy(env, abs_goals, 5)) # This is slow!!!
-        plot_eval_results(results, goals, it, r_min, r_max, logdir)
+        #results = list(evaluate_policy(env, abs_goals, 5)) # This is slow!!!
+        #plot_eval_results(results, goals, it, r_min, r_max, logdir)
         results = list(update_policy(env, abs_goals, 5)) # This is slow!!!
         plot_results(results, goals, it, r_min, r_max, logdir)
 
-        labels = [int(score >= r_min and score < r_max) for score, (gx, gy) in results]
-        for _ in range(5000):
-                lsgan.train_step(np.array(labels), np.array(goals))
+        labels = [int(score >= r_min and score <= r_max) for score, (gx, gy) in results]
+        
+        for _ in range(2000):
+            sess.run(tf.variables_initializer(var_list = [tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='G'),tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='D')]))
+            lsgan.train_step(np.array(labels), goals)
 
         d_min, d_max = 1E10, 0
         scores = []
@@ -243,19 +239,19 @@ def train(env_name,
                 d_max = max(d_max, np.sqrt(gx * gx + gy * gy))
         scores = np.array(scores)
 
-        novel = [] 
-        for zzb in range(len(results)):
-            score=results[zzb][0]
-            gx = goals[zzb][0]
-            gy = goals[zzb][1]
+        for zzb in range(len(goals)):
+            gx = training_goals[zzb][0]
+            gy = training_goals[zzb][1]
+            novel=True
             for old_gx, old_gy in replay_buffer:
                 dx = old_gx - gx
                 dy = old_gy - gy
                 if np.sqrt(dx * dx + dy * dy) <= eps:
+                    novel=False
                     break
-            novel.append((gx, gy))
-        replay_buffer.extend(novel)
-        
+                if novel:
+                    replay_buffer.append((gx, gy))
+ 
 
         logger.log("********** Iteration %i ************" % (it))
         logger.record_tabular("d_min", d_min)
