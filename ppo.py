@@ -207,15 +207,28 @@ def train(env_name,
         return zip(scores, goals)
 
 
-    env = Env(env_name, eps = eps)
+    env = Env(env_name, eps = 0.5)
     
-    replay_buffer = deque(maxlen = 100)
+    replay_buffer = deque(maxlen = num_goals)
     for it in range(max_iters):
-        goals = []
+        cand_goals = []
         for replay_idx in range(min(num_goals*1//3, len(replay_buffer))):
-            goals.append(replay_buffer[np.random.randint(len(replay_buffer))])
-        goals.extend(lsgan.generate_goals(num_goals-len(goals)))
-        goals = np.array(goals) 
+            cand_goals.append(replay_buffer[np.random.randint(len(replay_buffer))])
+        cand_goals.extend(lsgan.generate_goals(num_goals-len(cand_goals)))
+
+        cand_goals = np.array(cand_goals)
+        filtered_goals = []
+        for goal in cand_goals:
+            novel = True
+            for exist_goal in filtered_goals:
+                if np.sqrt(np.sum(np.square(goal - exist_goal))) < eps:
+                    novel = False
+                    break
+            if novel:
+                filtered_goals.append(goal)
+        goals = np.array(filtered_goals)
+        print("# of training goals:", goals.shape[0])
+
         abs_goals = [(abs(goal[0]), abs(goal[1])) for goal in goals]
         # draw the goals.
         #results = list(evaluate_policy(env, abs_goals, 5)) # This is slow!!!
@@ -227,6 +240,8 @@ def train(env_name,
         sess.run(tf.variables_initializer(var_list = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='G'))) 
         sess.run(tf.variables_initializer(var_list = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='D'))) 
         for _ in range(2000):
+            n = goals.shape[0]
+            indices = np.random.randint(0, n, n)
             lsgan.train_step(np.array(labels), goals)
 
         d_min, d_max = 1E10, 0
@@ -249,8 +264,8 @@ def train(env_name,
                 if np.sqrt(dx * dx + dy * dy) <= eps:
                     novel=False
                     break
-                if novel:
-                    replay_buffer.append((gx, gy))
+            if novel:
+                replay_buffer.append([gx, gy])
  
 
         logger.log("********** Iteration %i ************" % (it))
