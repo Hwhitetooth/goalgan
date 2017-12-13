@@ -1,6 +1,5 @@
 import gan_network as nn
 import tensorflow as tf
-import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from collections import deque
@@ -44,6 +43,7 @@ def scatter_plot(goals, j, i, r_min, r_max):
         else:
             ax.scatter(x, y, color='blue')
     f.savefig('./samples/sample%s_%s.png' % (j,i))
+    f.clf()
 
 
 def assign_labels(goals, r_min, r_max):
@@ -67,25 +67,39 @@ def main():
     lsgan = nn.LSGAN(sess, 'lsgan')
     sess.run(tf.global_variables_initializer())
 
-    replay_buffer = deque(maxlen = 100)
-    lsgan.a, lsgan.b, lsgan.c = 0, 1, 1
+    # scatter_plot(lsgan.generate_goals(1000), 1300012810, 15126236, 0, 1)
+    # exit()
+
+    replay_buffer = deque(maxlen=1000)
     lsgan.train_init()
-    lsgan.a, lsgan.b, lsgan.c = -1, 1, 0
-    for j in range(0,60):
-        r_min = j*0.02
-        r_max=j*0.02+1
+    for j in range(60):
+        r_min = j * 0.05
+        r_max = j * 0.05 + 1
         training_goals = []
-        for replay_idx in range(min(200*1//3, len(replay_buffer))):
-            training_goals.append(replay_buffer[np.random.randint(len(replay_buffer))])
-        training_goals.extend(lsgan.generate_goals(200-len(training_goals)))
-        training_goals = np.array(training_goals)
+        for replay_idx in range(min(500 // 3, len(replay_buffer))):
+            training_goals.append(np.array(replay_buffer[np.random.randint(len(replay_buffer))]))
+        training_goals.extend(lsgan.generate_goals(500 - len(training_goals)))
+
+        filtered_goals = []
+        for goal in training_goals:
+            novel = True
+            for exist_goal in filtered_goals:
+                if np.sqrt(np.sum(np.square(goal - exist_goal))) < 0.1:
+                    novel = False
+                    break
+            if novel:
+                filtered_goals.append(goal)
+        training_goals = np.array(filtered_goals)
+        print("# of training goals:", training_goals.shape[0])
+
         scatter_plot(training_goals, j,-1, r_min, r_max)
         training_labels = assign_labels(training_goals, r_min, r_max)
 
         #reset GAN network
-        # sess.run(tf.global_variables_initializer())
-        for i in range(0,200) :
-            indices = np.random.randint(0, 200, 200)
+        sess.run(tf.global_variables_initializer())
+        for i in range(2000) :
+            n = training_goals.shape[0]
+            indices = np.random.randint(0, n, n)
             d_loss, g_loss = lsgan.train_step(training_labels[indices], training_goals[indices])
             
             if i % 100 == 0:
@@ -101,10 +115,11 @@ def main():
             for old_gx, old_gy in replay_buffer:
                 dx = old_gx - gx
                 dy = old_gy - gy
-                if np.sqrt(dx * dx + dy * dy) <= eps:
+                if np.sqrt(dx * dx + dy * dy) <= 0.1:
                     novel=False
                     break
-                if novel:
-                    replay_buffer.append((gx, gy))
+            if novel:
+                replay_buffer.append((gx, gy))
 
-main()
+if __name__ == "__main__":
+    main()
