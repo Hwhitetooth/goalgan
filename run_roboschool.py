@@ -22,7 +22,8 @@ def main():
 
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
-    sess = tf.Session(config = config)
+    config.allow_soft_placement = True
+    sess = tf.Session(config=config)
 
     logdir = os.path.expanduser(args.logdir)
     logdir += "/" + args.env + "/" + 'rmin%g'%args.r_min + '_rmax%g'%args.r_max+'_'+'#goal%d'%args.num_goals+'eps%g'%args.eps+time.strftime("%Y_%m_%dT%H:%M:%S", time.localtime())
